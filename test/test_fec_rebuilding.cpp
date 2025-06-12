@@ -5,7 +5,7 @@
 #include "gtest/gtest.h"
 #include "test_env.h"
 #include "packet.h"
-#include "fec.h"
+#include <fec.h>
 #include "core.h"
 #include "packetfilter.h"
 #include "packetfilter_api.h"
