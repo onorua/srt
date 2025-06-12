@@ -1156,6 +1156,10 @@ if (srt_libspec_shared)
                 target_link_libraries(${TARGET_srt}_shared PRIVATE ${SSL_LIBRARIES})
         endif()
         if (HAVE_RSFEC)
+                # Linking libfec privately is enough for the shared
+                # library because the symbol resolution happens at
+                # build time.  The dependency does not need to be
+                # propagated to applications.
                 target_link_libraries(${TARGET_srt}_shared PRIVATE ${FEC_LIBRARY})
         endif()
 	if (MICROSOFT)
@@ -1199,7 +1203,10 @@ if (srt_libspec_static)
                 target_link_libraries(${TARGET_srt}_static PRIVATE ${SSL_LIBRARIES})
         endif()
         if (HAVE_RSFEC)
-                target_link_libraries(${TARGET_srt}_static PRIVATE ${FEC_LIBRARY})
+                # When building a static library, propagate the libfec
+                # dependency so that applications linking against
+                # `${TARGET_srt}_static` also link with libfec.
+                target_link_libraries(${TARGET_srt}_static PUBLIC ${FEC_LIBRARY})
         endif()
         if (MICROSOFT)
                 target_link_libraries(${TARGET_srt}_static PRIVATE ws2_32.lib)
