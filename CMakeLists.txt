@@ -779,6 +779,14 @@ set (SRT_SRC_COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set (SRT_SRC_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 set (SRT_SRC_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
+# Locate external FEC header
+find_path(FEC_INCLUDE_DIR fec.h HINTS ${SRT_SRC_SRTCORE_DIR})
+if (FEC_INCLUDE_DIR)
+    message(STATUS "FEC include dir: ${FEC_INCLUDE_DIR}")
+else()
+    message(FATAL_ERROR "Failed to find fec.h. Specify FEC_INCLUDE_DIR.")
+endif()
+
 if(WIN32)
 	message(STATUS "DETECTED SYSTEM: WINDOWS;  WIN32=1; PTW32_STATIC_LIB=1")
 	add_definitions(-DWIN32=1 -DPTW32_STATIC_LIB=1)
@@ -823,6 +831,7 @@ endif()
 
 # This is obligatory include directory for all targets. This is only
 # for private headers. Installable headers should be exclusively used DIRECTLY.
+include_directories(${FEC_INCLUDE_DIR})
 include_directories(${SRT_SRC_COMMON_DIR} ${SRT_SRC_SRTCORE_DIR} ${SRT_SRC_HAICRYPT_DIR})
 
 if (ENABLE_LOGGING)

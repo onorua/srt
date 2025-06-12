@@ -21,7 +21,7 @@
 #include "packet.h"
 #include "logging.h"
 
-#include "fec.h"
+#include <fec.h>
 
 // Maximum allowed "history" remembered in the receiver groups.
 // This is calculated in series, that is, this number will be
