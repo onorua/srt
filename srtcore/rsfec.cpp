@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <fec.h>
+#include FEC_HEADER
 #ifdef __cplusplus
 }
 #endif
