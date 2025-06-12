@@ -7,6 +7,7 @@
 #include <string>
 
 namespace srt {
+#if HAVE_RSFEC
 
 class RSFecFilter : public SrtPacketFilterBase
 {
@@ -39,8 +40,11 @@ public:
     bool packControlPacket(SrtPacket& pkt, int32_t seq) override;
     void feedSource(CPacket& pkt) override;
     bool receive(const CPacket& pkt, loss_seqs_t& loss) override;
+
     SRT_ARQLevel arqLevel() override { return SRT_ARQ_NEVER; }
 };
+
+#endif // HAVE_RSFEC
 
 } // namespace srt
 

@@ -27,7 +27,9 @@ filtering, was originally created as a means to implement Forward Error
 Correction (FEC) in SRT, but can be extended for other uses.
 
 As of SRT version 1.4 there is one built-in filter ("fec") installed, but more
-can be added.
+can be added. This repository also includes an optional Reed–Solomon based
+filter named `rsfec`. Building this filter requires the external
+[`libfec`](https://github.com/quiet/libfec) library.
 
 # Configuration
 

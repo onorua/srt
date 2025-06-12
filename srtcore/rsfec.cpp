@@ -1,10 +1,11 @@
 #include "rsfec.h"
 #include "packet.h"
 #include "logging.h"
+#if HAVE_RSFEC
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include </usr/include/fec.h>
+#include <fec.h>
 #ifdef __cplusplus
 }
 #endif
@@ -108,3 +109,5 @@ bool RSFecFilter::receive(const CPacket& pkt, loss_seqs_t& loss)
 }
 
 } // namespace srt
+
+#endif // HAVE_RSFEC

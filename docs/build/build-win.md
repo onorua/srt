@@ -68,6 +68,10 @@ SRT as of v1.4.2 supports two threading libraries:
 The `pthreads` library is provided out-of-the-box on all POSIX-based systems.
 On Windows it can be provided as a 3rd party library (see below).
 However, using pthread wrapper on Windows comes with limitations, e.g. converting time from POSIX-based to Windows-based might loose precision, monotonic clock implementation eventually uses wall clock, etc.
+
+#### 1.2.3. Reed–Solomon FEC Library (optional)
+
+The optional `rsfec` packet filter depends on the `libfec` library. When building with `-DENABLE_RSFEC=ON` make sure `libfec` is available on your system.
 **The C++11 standard thread library is recommended to be used on Windows.**
 
 ### 1.3. Package Managers
