@@ -1039,15 +1039,23 @@ if (ENABLE_RSFEC)
     if (FEC_FOUND)
         set(FEC_INCLUDE_DIR ${FEC_INCLUDE_DIRS})
         set(FEC_LIBRARY ${FEC_LIBRARIES})
-    else()
+    endif()
+
+    if (NOT FEC_INCLUDE_DIR)
         find_path(FEC_INCLUDE_DIR
             NAMES fec.h
             HINTS /usr/include /usr/local/include /opt/homebrew/include
         )
-        find_library(FEC_LIBRARY fec
+    endif()
+
+    if (NOT FEC_LIBRARY)
+        find_library(FEC_LIBRARY
+            NAMES fec libfec
             HINTS /usr/lib /usr/local/lib /opt/homebrew/lib
+            PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
         )
     endif()
+
     if (FEC_INCLUDE_DIR AND FEC_LIBRARY AND
         NOT FEC_INCLUDE_DIR STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/srtcore")
         message(STATUS "libfec include dir: ${FEC_INCLUDE_DIR}")
