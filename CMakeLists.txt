@@ -1034,9 +1034,22 @@ set(OBJECT_LIB_SUPPORT "${PROJECT_SOURCE_DIR}/cmake_object_lib_support.c")
 
 option(ENABLE_RSFEC "Enable Reed-Solomon FEC packet filter" ON)
 if (ENABLE_RSFEC)
-    find_path(FEC_INCLUDE_DIR fec.h)
-    find_library(FEC_LIBRARY fec)
-    if (FEC_INCLUDE_DIR AND FEC_LIBRARY)
+    find_package(PkgConfig)
+    pkg_check_modules(FEC QUIET libfec)
+    if (FEC_FOUND)
+        set(FEC_INCLUDE_DIR ${FEC_INCLUDE_DIRS})
+        set(FEC_LIBRARY ${FEC_LIBRARIES})
+    else()
+        find_path(FEC_INCLUDE_DIR
+            NAMES fec.h
+            HINTS /usr/include /usr/local/include /opt/homebrew/include
+        )
+        find_library(FEC_LIBRARY fec
+            HINTS /usr/lib /usr/local/lib /opt/homebrew/lib
+        )
+    endif()
+    if (FEC_INCLUDE_DIR AND FEC_LIBRARY AND
+        NOT FEC_INCLUDE_DIR STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/srtcore")
         message(STATUS "libfec include dir: ${FEC_INCLUDE_DIR}")
         message(STATUS "libfec library: ${FEC_LIBRARY}")
         include_directories(BEFORE ${FEC_INCLUDE_DIR})

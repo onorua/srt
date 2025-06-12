@@ -175,6 +175,8 @@ In live streaming configurations, the SRT protocol maintains a constant end-to-e
   * C++03: Pthreads (for POSIX systems it's built in, for Windows there is a ported library).
 * Tcl 8.5 is optional and is used by `./configure` script. Otherwise, use CMake directly.
 * [libfec](https://github.com/quiet/libfec) is required when building the optional `rsfec` packet filter (`-DENABLE_RSFEC=ON`).
+  If it is installed in a non-standard location, set `FEC_INCLUDE_DIR` and
+  `FEC_LIBRARY` when invoking CMake.
 
 ### Build Options
 

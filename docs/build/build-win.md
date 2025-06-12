@@ -71,7 +71,7 @@ However, using pthread wrapper on Windows comes with limitations, e.g. convertin
 
 #### 1.2.3. Reed–Solomon FEC Library (optional)
 
-The optional `rsfec` packet filter depends on the `libfec` library. When building with `-DENABLE_RSFEC=ON` make sure `libfec` is available on your system.
+The optional `rsfec` packet filter depends on the `libfec` library. When building with `-DENABLE_RSFEC=ON` make sure `libfec` is available on your system. If it is installed in a custom location, pass `-DFEC_INCLUDE_DIR` and `-DFEC_LIBRARY` to `cmake`.
 **The C++11 standard thread library is recommended to be used on Windows.**
 
 ### 1.3. Package Managers
