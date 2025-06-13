@@ -1031,6 +1031,48 @@ set(OBJECT_LIB_SUPPORT "${PROJECT_SOURCE_DIR}/cmake_object_lib_support.c")
 # of its source files are incorporated directly to the source list of the
 # project that depends on it. In cmake this must be handled manually.
 
+option(ENABLE_RSFEC "Enable Reed-Solomon FEC packet filter" ON)
+
+if(ENABLE_RSFEC)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FEC libfec)
+
+    if(FEC_FOUND)
+        include_directories(${FEC_INCLUDE_DIRS})
+        link_libraries(${FEC_LIBRARIES})
+        message(STATUS "libfec found via pkg-config")
+    else()
+        find_path(FEC_INCLUDE_DIR fec.h
+                  PATHS /usr/include /usr/local/include /opt/homebrew/include
+                  PATH_SUFFIXES fec
+                  NO_DEFAULT_PATH)
+
+        find_library(FEC_LIBRARY fec
+                     PATHS /usr/lib /usr/local/lib /opt/homebrew/lib
+                     PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
+                     NO_DEFAULT_PATH)
+
+        if(FEC_INCLUDE_DIR AND FEC_LIBRARY)
+            include_directories(${FEC_INCLUDE_DIR})
+            link_libraries(${FEC_LIBRARY})
+            message(STATUS "libfec found manually")
+        else()
+            message(WARNING "libfec not found - disabling RSFEC packet filter")
+            set(ENABLE_RSFEC OFF CACHE BOOL "Enable Reed-Solomon FEC packet filter" FORCE)
+        endif()
+    endif()
+
+    if(ENABLE_RSFEC)
+        add_definitions(-DHAVE_RSFEC=1)
+        message(STATUS "RSFEC support enabled")
+    else()
+        add_definitions(-DHAVE_RSFEC=0)
+        message(STATUS "RSFEC support disabled")
+    endif()
+else()
+    add_definitions(-DHAVE_RSFEC=0)
+    message(STATUS "RSFEC support disabled")
+endif()
 
 # ---
 # Target: srt. DEFINITION ONLY. Haicrypt flag settings follow.
