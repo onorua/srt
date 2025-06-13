@@ -14,5 +14,8 @@
 
 // Integration header
 #include "fec.h"
+#if HAVE_RSFEC
+#include "rsfec.h"
+#endif
 
 #endif

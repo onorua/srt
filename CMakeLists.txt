@@ -860,11 +860,12 @@ if (ENABLE_EXPERIMENTAL_BONDING)
 endif()
 
 if (ENABLE_BONDING)
-	list(APPEND SRT_EXTRA_CFLAGS "-DENABLE_BONDING=1")
-	message(STATUS "ENABLE_BONDING: ON")
+        list(APPEND SRT_EXTRA_CFLAGS "-DENABLE_BONDING=1")
+        message(STATUS "ENABLE_BONDING: ON")
 else()
-	message(STATUS "ENABLE_BONDING: OFF")
+        message(STATUS "ENABLE_BONDING: OFF")
 endif()
+
 
 if (ENABLE_THREAD_CHECK)
 	add_definitions(
@@ -1031,6 +1032,50 @@ set(OBJECT_LIB_SUPPORT "${PROJECT_SOURCE_DIR}/cmake_object_lib_support.c")
 # of its source files are incorporated directly to the source list of the
 # project that depends on it. In cmake this must be handled manually.
 
+option(ENABLE_RSFEC "Enable Reed-Solomon FEC packet filter" ON)
+if (ENABLE_RSFEC)
+    find_package(PkgConfig)
+    pkg_check_modules(FEC QUIET libfec)
+    if (FEC_FOUND)
+        set(FEC_INCLUDE_DIR ${FEC_INCLUDE_DIRS})
+        set(FEC_LIBRARY ${FEC_LIBRARIES})
+    endif()
+
+    if (NOT FEC_INCLUDE_DIR)
+        find_path(FEC_INCLUDE_DIR
+            NAMES fec.h
+            HINTS /usr/include /usr/local/include /opt/homebrew/include
+        )
+    endif()
+
+    if (NOT FEC_LIBRARY)
+        find_library(FEC_LIBRARY
+            NAMES fec libfec
+            HINTS /usr/lib /usr/local/lib /opt/homebrew/lib
+            PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
+        )
+    endif()
+
+    if (FEC_INCLUDE_DIR AND FEC_LIBRARY AND
+        NOT FEC_INCLUDE_DIR STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/srtcore")
+        message(STATUS "libfec include dir: ${FEC_INCLUDE_DIR}")
+        message(STATUS "libfec library: ${FEC_LIBRARY}")
+        include_directories(BEFORE ${FEC_INCLUDE_DIR})
+        add_definitions(-DFEC_HEADER=\"${FEC_INCLUDE_DIR}/fec.h\")
+        set (HAVE_RSFEC 1)
+        list(APPEND SRT_EXTRA_CFLAGS "-DHAVE_RSFEC=1")
+        message(STATUS "RSFEC support enabled")
+    else()
+        message(WARNING "libfec not found - disabling RSFEC packet filter")
+        set (HAVE_RSFEC 0)
+        set (ENABLE_RSFEC OFF)
+        message(STATUS "RSFEC support disabled")
+    endif()
+else()
+    set (HAVE_RSFEC 0)
+    message(STATUS "RSFEC support disabled")
+endif()
+
 
 # ---
 # Target: srt. DEFINITION ONLY. Haicrypt flag settings follow.
@@ -1115,9 +1160,16 @@ if (srt_libspec_shared)
 	set_property(TARGET ${TARGET_srt}_shared PROPERTY OUTPUT_NAME ${TARGET_srt})
 	set_target_properties (${TARGET_srt}_shared PROPERTIES VERSION ${SRT_VERSION} SOVERSION ${SRT_VERSION_MAJOR}.${SRT_VERSION_MINOR})
 	list (APPEND INSTALL_TARGETS ${TARGET_srt}_shared)
-	if (ENABLE_ENCRYPTION)
-		target_link_libraries(${TARGET_srt}_shared PRIVATE ${SSL_LIBRARIES})
-	endif()
+        if (ENABLE_ENCRYPTION)
+                target_link_libraries(${TARGET_srt}_shared PRIVATE ${SSL_LIBRARIES})
+        endif()
+        if (HAVE_RSFEC)
+                # Linking libfec privately is enough for the shared
+                # library because the symbol resolution happens at
+                # build time.  The dependency does not need to be
+                # propagated to applications.
+                target_link_libraries(${TARGET_srt}_shared PRIVATE ${FEC_LIBRARY})
+        endif()
 	if (MICROSOFT)
 		target_link_libraries(${TARGET_srt}_shared PRIVATE ws2_32.lib)
 		if (NOT (ENABLE_ENCRYPTION AND "${USE_ENCLIB}" STREQUAL "botan"))
@@ -1155,11 +1207,17 @@ if (srt_libspec_static)
 	endif()
 
 	list (APPEND INSTALL_TARGETS ${TARGET_srt}_static)
-	if (ENABLE_ENCRYPTION)
-		target_link_libraries(${TARGET_srt}_static PRIVATE ${SSL_LIBRARIES})
-	endif()
-	if (MICROSOFT)
-		target_link_libraries(${TARGET_srt}_static PRIVATE ws2_32.lib)
+        if (ENABLE_ENCRYPTION)
+                target_link_libraries(${TARGET_srt}_static PRIVATE ${SSL_LIBRARIES})
+        endif()
+        if (HAVE_RSFEC)
+                # When building a static library, propagate the libfec
+                # dependency so that applications linking against
+                # `${TARGET_srt}_static` also link with libfec.
+                target_link_libraries(${TARGET_srt}_static PUBLIC ${FEC_LIBRARY})
+        endif()
+        if (MICROSOFT)
+                target_link_libraries(${TARGET_srt}_static PRIVATE ws2_32.lib)
 		if (SRT_USE_OPENSSL_STATIC_LIBS)
 			target_link_libraries(${TARGET_srt}_static PRIVATE crypt32.lib)
 		endif()
@@ -1171,7 +1229,11 @@ if (srt_libspec_static)
 	endif()
 endif()
 
-target_include_directories(srt_virtual PRIVATE  ${SSL_INCLUDE_DIRS})
+if (HAVE_RSFEC)
+    target_include_directories(srt_virtual PRIVATE BEFORE ${FEC_INCLUDE_DIR} ${SSL_INCLUDE_DIRS})
+else()
+    target_include_directories(srt_virtual PRIVATE ${SSL_INCLUDE_DIRS})
+endif()
 
 if (MICROSOFT)
 	if (SRT_USE_OPENSSL_STATIC_LIBS)
@@ -1201,6 +1263,7 @@ endforeach()
 
 
 set (SRT_LIBS_PRIVATE ${SRT_LIBS_PRIVATE} ${PTHREAD_LIBRARY})
+
 
 target_compile_definitions(srt_virtual PRIVATE -DSRT_EXPORTS )
 if (ENABLE_SHARED)

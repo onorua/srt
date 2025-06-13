@@ -12,6 +12,8 @@ core.cpp
 crypto.cpp
 epoll.cpp
 fec.cpp
+SOURCES - HAVE_RSFEC
+rsfec.cpp
 handshake.cpp
 list.cpp
 logger_default.cpp

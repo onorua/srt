@@ -314,6 +314,10 @@ PacketFilter::Internal::Internal()
 
     m_filters["fec"] = new PacketFilter::Creator<FECFilterBuiltin>;
     m_builtin_filters.insert("fec");
+#if HAVE_RSFEC
+    m_filters["rsfec"] = new PacketFilter::Creator<RSFecFilter>;
+    m_builtin_filters.insert("rsfec");
+#endif
 }
 
 bool PacketFilter::configure(CUDT* parent, CUnitQueue* uq, const std::string& confstr)
