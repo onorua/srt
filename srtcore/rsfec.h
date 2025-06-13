@@ -5,6 +5,7 @@
 #include "packetfilter_api.h"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace srt {
 
@@ -24,6 +25,22 @@ class RSFecFilter : public SrtPacketFilterBase
         size_t next_parity;
         SendGroup(): base(SRT_SEQNO_NONE), collected(0), next_parity(0) {}
     } snd;
+
+    struct RecvGroup
+    {
+        int32_t base;
+        std::vector< std::vector<unsigned char> > data;
+        std::vector<bool> have_data;
+        std::vector< std::vector<unsigned char> > parity;
+        std::vector<bool> have_parity;
+        size_t have_count;
+        uint32_t timestamp;
+        bool ts_set;
+        RecvGroup(): base(SRT_SEQNO_NONE), have_count(0), timestamp(0), ts_set(false) {}
+    };
+
+    std::map<int32_t, RecvGroup> rcv_groups;
+    int32_t rcv_base;
 
     std::vector<SrtPacket>& m_provided;
 
