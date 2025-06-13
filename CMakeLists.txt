@@ -1031,6 +1031,48 @@ set(OBJECT_LIB_SUPPORT "${PROJECT_SOURCE_DIR}/cmake_object_lib_support.c")
 # of its source files are incorporated directly to the source list of the
 # project that depends on it. In cmake this must be handled manually.
 
+option(ENABLE_RSFEC "Enable Reed-Solomon FEC packet filter" ON)
+
+if(ENABLE_RSFEC)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FEC libfec)
+
+    if(FEC_FOUND)
+        include_directories(${FEC_INCLUDE_DIRS})
+        link_libraries(${FEC_LIBRARIES})
+        message(STATUS "libfec found via pkg-config")
+    else()
+        find_path(FEC_INCLUDE_DIR fec.h
+                  PATHS /usr/include /usr/local/include /opt/homebrew/include
+                  PATH_SUFFIXES fec
+                  NO_DEFAULT_PATH)
+
+        find_library(FEC_LIBRARY fec
+                     PATHS /usr/lib /usr/local/lib /opt/homebrew/lib
+                     PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
+                     NO_DEFAULT_PATH)
+
+        if(FEC_INCLUDE_DIR AND FEC_LIBRARY)
+            include_directories(${FEC_INCLUDE_DIR})
+            link_libraries(${FEC_LIBRARY})
+            message(STATUS "libfec found manually")
+        else()
+            message(WARNING "libfec not found - disabling RSFEC packet filter")
+            set(ENABLE_RSFEC OFF CACHE BOOL "Enable Reed-Solomon FEC packet filter" FORCE)
+        endif()
+    endif()
+
+    if(ENABLE_RSFEC)
+        add_definitions(-DHAVE_RSFEC=1)
+        message(STATUS "RSFEC support enabled")
+    else()
+        add_definitions(-DHAVE_RSFEC=0)
+        message(STATUS "RSFEC support disabled")
+    endif()
+else()
+    add_definitions(-DHAVE_RSFEC=0)
+    message(STATUS "RSFEC support disabled")
+endif()
 
 # ---
 # Target: srt. DEFINITION ONLY. Haicrypt flag settings follow.
@@ -1115,9 +1157,10 @@ if (srt_libspec_shared)
 	set_property(TARGET ${TARGET_srt}_shared PROPERTY OUTPUT_NAME ${TARGET_srt})
 	set_target_properties (${TARGET_srt}_shared PROPERTIES VERSION ${SRT_VERSION} SOVERSION ${SRT_VERSION_MAJOR}.${SRT_VERSION_MINOR})
 	list (APPEND INSTALL_TARGETS ${TARGET_srt}_shared)
-	if (ENABLE_ENCRYPTION)
-		target_link_libraries(${TARGET_srt}_shared PRIVATE ${SSL_LIBRARIES})
-	endif()
+        if (ENABLE_ENCRYPTION)
+                target_link_libraries(${TARGET_srt}_shared PRIVATE ${SSL_LIBRARIES})
+        endif()
+        target_link_libraries(${TARGET_srt}_shared PRIVATE fec)
 	if (MICROSOFT)
 		target_link_libraries(${TARGET_srt}_shared PRIVATE ws2_32.lib)
 		if (NOT (ENABLE_ENCRYPTION AND "${USE_ENCLIB}" STREQUAL "botan"))
@@ -1155,11 +1198,12 @@ if (srt_libspec_static)
 	endif()
 
 	list (APPEND INSTALL_TARGETS ${TARGET_srt}_static)
-	if (ENABLE_ENCRYPTION)
-		target_link_libraries(${TARGET_srt}_static PRIVATE ${SSL_LIBRARIES})
-	endif()
-	if (MICROSOFT)
-		target_link_libraries(${TARGET_srt}_static PRIVATE ws2_32.lib)
+        if (ENABLE_ENCRYPTION)
+                target_link_libraries(${TARGET_srt}_static PRIVATE ${SSL_LIBRARIES})
+        endif()
+        target_link_libraries(${TARGET_srt}_static PRIVATE fec)
+        if (MICROSOFT)
+                target_link_libraries(${TARGET_srt}_static PRIVATE ws2_32.lib)
 		if (SRT_USE_OPENSSL_STATIC_LIBS)
 			target_link_libraries(${TARGET_srt}_static PRIVATE crypt32.lib)
 		endif()
@@ -1200,7 +1244,7 @@ foreach(tar ${srtpack_libspec_common})
 endforeach()
 
 
-set (SRT_LIBS_PRIVATE ${SRT_LIBS_PRIVATE} ${PTHREAD_LIBRARY})
+set (SRT_LIBS_PRIVATE ${SRT_LIBS_PRIVATE} ${PTHREAD_LIBRARY} fec)
 
 target_compile_definitions(srt_virtual PRIVATE -DSRT_EXPORTS )
 if (ENABLE_SHARED)
