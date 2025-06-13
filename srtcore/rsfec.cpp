@@ -35,7 +35,7 @@ bool RSFecFilter::verifyConfig(const SrtFilterConfig& cfg, string& w_error)
 
 RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& provided,
                          const string& confstr)
-    : SrtPacketFilterBase(init), m_rs(nullptr), snd(), m_provided(provided)
+    : SrtPacketFilterBase(init), m_rs(nullptr), snd(), m_provided(provided), rcv_base(CSeqNo::incseq(rcvISN()))
 {
     if (!ParseFilterConfig(confstr, cfg))
         throw CUDTException(MJ_NOTSUP, MN_INVAL, 0);
@@ -103,8 +103,109 @@ bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
 
 bool RSFecFilter::receive(const CPacket& pkt, loss_seqs_t& loss)
 {
-    // TODO: implement decoding of lost packets using libfec
-    return true; // passthrough
+    (void)loss;
+    int32_t seq = pkt.getSeqNo();
+    bool is_ctl = pkt.getMsgSeq() == SRT_MSGNO_CONTROL;
+
+    int n = m_k + m_m;
+    int off = CSeqNo::seqoff(rcv_base, seq);
+    if (off < 0)
+        return true; // ignore packets from the past
+    int grp_idx = off / n;
+    int idx = off % n;
+    int32_t gbase = CSeqNo::incseq(rcv_base, grp_idx * n);
+
+    RecvGroup& g = rcv_groups[gbase];
+    if (g.base == SRT_SEQNO_NONE) {
+        g.base = gbase;
+        g.data.resize(m_k, std::vector<unsigned char>(payloadSize()));
+        g.have_data.assign(m_k, false);
+        g.parity.resize(m_m, std::vector<unsigned char>(payloadSize()));
+        g.have_parity.assign(m_m, false);
+    }
+
+    if (!g.ts_set) {
+        g.timestamp = pkt.getMsgTimeStamp();
+        g.ts_set = true;
+    }
+
+    if (idx < m_k) {
+        if (!g.have_data[idx]) {
+            memcpy(&g.data[idx][0], pkt.data(), payloadSize());
+            g.have_data[idx] = true;
+            g.have_count++;
+        }
+        return true; // pass data packets to SRT
+    }
+    else {
+        int pidx = idx - m_k;
+        if (pidx < m_m && !g.have_parity[pidx]) {
+            memcpy(&g.parity[pidx][0], pkt.data(), payloadSize());
+            g.have_parity[pidx] = true;
+            g.have_count++;
+        }
+        // parity packets are consumed
+        is_ctl = true;
+    }
+
+    if (g.have_count >= (size_t)m_k) {
+        // attempt decode if any data missing
+        std::vector<int> miss;
+        for (int i = 0; i < m_k; ++i)
+            if (!g.have_data[i])
+                miss.push_back(i);
+        if (!miss.empty() && (int)miss.size() <= m_m) {
+            std::vector<int> eras;
+            eras.reserve(miss.size());
+            // also mark missing parity
+            for (int i : miss)
+                eras.push_back(i);
+            for (int p = 0; p < m_m; ++p)
+                if (!g.have_parity[p])
+                    eras.push_back(m_k + p);
+
+            std::vector<unsigned char> column(m_k + m_m);
+            for (size_t j = 0; j < payloadSize(); ++j) {
+                for (int i = 0; i < m_k; ++i)
+                    column[i] = g.have_data[i] ? g.data[i][j] : 0;
+                for (int p = 0; p < m_m; ++p)
+                    column[m_k + p] = g.have_parity[p] ? g.parity[p][j] : 0;
+
+                int eras_pos[255];
+                for (size_t e = 0; e < eras.size(); ++e)
+                    eras_pos[e] = eras[e];
+                int res = decode_rs_char(m_rs, column.data(), eras_pos, (int)eras.size());
+                if (res >= 0) {
+                    for (int i_idx = 0; i_idx < (int)miss.size(); ++i_idx) {
+                        int di = miss[i_idx];
+                        g.data[di][j] = column[di];
+                    }
+                } else {
+                    break; // decoding failed
+                }
+            }
+
+            // supply rebuilt packets
+            for (int di : miss) {
+                SrtPacket p(payloadSize());
+                p.length = payloadSize();
+                p.hdr[SRT_PH_SEQNO] = CSeqNo::incseq(g.base, di);
+                p.hdr[SRT_PH_TIMESTAMP] = g.timestamp;
+                memcpy(p.buffer, &g.data[di][0], payloadSize());
+                m_provided.push_back(p);
+                g.have_data[di] = true;
+            }
+        }
+
+        bool all = true;
+        for (int i = 0; i < m_k; ++i)
+            if (!g.have_data[i]) { all = false; break; }
+        if (all) {
+            rcv_groups.erase(gbase);
+        }
+    }
+
+    return !is_ctl;
 }
 
 } // namespace srt
