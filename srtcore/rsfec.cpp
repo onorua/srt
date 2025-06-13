@@ -35,7 +35,11 @@ bool RSFecFilter::verifyConfig(const SrtFilterConfig& cfg, string& w_error)
 
 RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& provided,
                          const string& confstr)
-    : SrtPacketFilterBase(init), m_rs(nullptr), snd(), m_provided(provided), rcv_base(CSeqNo::incseq(rcvISN()))
+    : SrtPacketFilterBase(init)
+    , m_rs(nullptr)
+    , snd()
+    , rcv_base(CSeqNo::incseq(rcvISN()))
+    , m_provided(provided)
 {
     if (!ParseFilterConfig(confstr, cfg))
         throw CUDTException(MJ_NOTSUP, MN_INVAL, 0);
@@ -91,6 +95,7 @@ void RSFecFilter::feedSource(CPacket& pkt)
 
 bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
 {
+    (void)seq;
     if (snd.collected < (size_t)m_k)
         return false;
     if (snd.next_parity >= snd.parity.size()) {
