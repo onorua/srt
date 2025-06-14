@@ -16,7 +16,7 @@ using namespace srt_logging;
 
 namespace srt {
 
-const char RSFecFilter::defaultConfig[] = "rsfec,k:10,parity:2";
+const char RSFecFilter::defaultConfig[] = "rsfec,k:10,parity:2,timeout:0";
 
 bool RSFecFilter::verifyConfig(const SrtFilterConfig& cfg, string& w_error)
 {
@@ -30,6 +30,13 @@ bool RSFecFilter::verifyConfig(const SrtFilterConfig& cfg, string& w_error)
         w_error = "k+parity must be <=255";
         return false;
     }
+    if (cfg.parameters.count("timeout")) {
+        int t = atoi(map_get(cfg.parameters, "timeout").c_str());
+        if (t < 0) {
+            w_error = "timeout must be >=0";
+            return false;
+        }
+    }
     return true;
 }
 
@@ -40,6 +47,7 @@ RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& pr
     , snd()
     , rcv_base(CSeqNo::incseq(rcvISN()))
     , m_provided(provided)
+    , m_timeout_us(0)
 {
     if (!ParseFilterConfig(confstr, cfg))
         throw CUDTException(MJ_NOTSUP, MN_INVAL, 0);
@@ -50,6 +58,8 @@ RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& pr
 
     m_k = atoi(map_get(cfg.parameters, "k").c_str());
     m_m = atoi(map_get(cfg.parameters, "parity").c_str());
+    if (cfg.parameters.count("timeout"))
+        m_timeout_us = atoi(map_get(cfg.parameters, "timeout").c_str()) * 1000;
 
     int pad = 255 - (m_k + m_m);
     m_rs = init_rs_char(8, 0x11d, 0, 1, m_m, pad);
@@ -65,8 +75,10 @@ RSFecFilter::~RSFecFilter()
 
 void RSFecFilter::feedSource(CPacket& pkt)
 {
-    if (snd.collected == 0)
+    if (snd.collected == 0) {
         snd.base = pkt.getSeqNo();
+        snd.start = sync::steady_clock::now();
+    }
 
     if (snd.collected < snd.data.size()) {
         memcpy(&snd.data[snd.collected][0], pkt.data(), payloadSize());
@@ -90,16 +102,26 @@ void RSFecFilter::feedSource(CPacket& pkt)
             snd.parity[p].hdr[SRT_PH_TIMESTAMP] = pkt.getMsgTimeStamp();
         }
         snd.next_parity = 0;
+        snd.start = sync::steady_clock::time_point();
     }
 }
 
 bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
 {
     (void)seq;
-    if (snd.collected < (size_t)m_k)
+    if (snd.collected < (size_t)m_k) {
+        if (m_timeout_us > 0 && !sync::is_zero(snd.start)) {
+            auto now = sync::steady_clock::now();
+            if (sync::count_microseconds(now - snd.start) >= m_timeout_us) {
+                snd.collected = 0;
+                snd.start = sync::steady_clock::time_point();
+            }
+        }
         return false;
+    }
     if (snd.next_parity >= snd.parity.size()) {
         snd.collected = 0;
+        snd.start = sync::steady_clock::time_point();
         return false;
     }
     pkt = snd.parity[snd.next_parity++];
