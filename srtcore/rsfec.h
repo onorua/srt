@@ -3,6 +3,7 @@
 
 #include "srt.h"
 #include "packetfilter_api.h"
+#include "sync.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -15,6 +16,7 @@ class RSFecFilter : public SrtPacketFilterBase
     int m_k;
     int m_m;
     void* m_rs;
+    int m_timeout_us;
 
     struct SendGroup
     {
@@ -23,6 +25,7 @@ class RSFecFilter : public SrtPacketFilterBase
         size_t collected;
         std::vector<SrtPacket> parity;
         size_t next_parity;
+        sync::steady_clock::time_point start;
         SendGroup(): base(SRT_SEQNO_NONE), collected(0), next_parity(0) {}
     } snd;
 
