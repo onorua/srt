@@ -44,10 +44,10 @@ RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& pr
                          const string& confstr)
     : SrtPacketFilterBase(init)
     , m_rs(nullptr)
+    , m_timeout_us(0)
     , snd()
     , rcv_base(CSeqNo::incseq(rcvISN()))
     , m_provided(provided)
-    , m_timeout_us(0)
 {
     if (!ParseFilterConfig(confstr, cfg))
         throw CUDTException(MJ_NOTSUP, MN_INVAL, 0);
