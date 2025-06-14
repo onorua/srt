@@ -47,6 +47,7 @@
 | [SRT Handshake](features/handshake.md)                       |     [features](features/)     | [handshake.md](features/handshake.md)                        | Description of SRT handshake mechanism. This<br />document might be outdated, please consult<br />[Section 3.2.1 Handshake][srt-internet-draft-sec-3-2-1] and<br />[Section 4.3 Handshake Messages](https://datatracker.ietf.org/doc/html/draft-sharabayko-srt-01#section-4.3) of the<br />[Internet Draft][srt-internet-draft] additionally. |
 | [Live Streaming <br /> Guidelines](features/live-streaming.md) |   [features](features/)     | [live-streaming.md](features/live-streaming.md)              | Guidelines for live streaming with SRT. See also<br />best practices and configuration tips in<br />[Section 7.1 Live Streaming](https://datatracker.ietf.org/doc/html/draft-sharabayko-srt-01#section-7.1) of the [Internet Draft][srt-internet-draft]. |
 | [SRT Packet <br /> Filtering & FEC][packet-filter]           |     [features](features/)     | [packet-filtering-and-fec.md][packet-filter]                 | Description of SRT packet filtering mechanism,<br />including FEC. |
+| [Reed-Solomon FEC Filter](features/rsfec.md)                 |     [features](features/)     | [rsfec.md](features/rsfec.md)                                | Alternative FEC filter based on Reed-Solomon coding. |
 | <img width=200px height=1px/>                                | <img width=100px height=1px/> | <img width=200px height=1px/>                                | <img width=500px height=1px/>                                |
 
 ## Sample Applications
@@ -75,3 +76,4 @@
 
 [main-backup]: features/bonding-main-backup.md
 [packet-filter]: features/packet-filtering-and-fec.md
+[rsfec]: features/rsfec.md

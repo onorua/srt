@@ -103,6 +103,11 @@ bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
         return false;
     }
     pkt = snd.parity[snd.next_parity++];
+    // mark as filter control packet in case the caller bypasses the
+    // PacketFilter wrapper
+    pkt.hdr[SRT_PH_MSGNO] = SRT_MSGNO_CONTROL |
+        MSGNO_PACKET_BOUNDARY::wrap(PB_SOLO);
+    pkt.hdr[SRT_PH_ID] = socketID();
     return true;
 }
 

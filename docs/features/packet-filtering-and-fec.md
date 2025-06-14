@@ -27,7 +27,8 @@ filtering, was originally created as a means to implement Forward Error
 Correction (FEC) in SRT, but can be extended for other uses.
 
 As of SRT version 1.4 there is one built-in filter ("fec") installed, but more
-can be added.
+can be added. The source tree also contains an experimental Reed‑Solomon filter
+named `rsfec` which follows the same configuration principles.
 
 # Configuration
 
