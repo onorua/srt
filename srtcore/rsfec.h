@@ -8,6 +8,9 @@
 #include <string>
 #include <map>
 
+// Added include for SrtPacket, CPacket, CMsgNo, etc.
+#include "packet.h"
+
 namespace srt {
 
 class RSFecFilter : public SrtPacketFilterBase
@@ -46,6 +49,9 @@ class RSFecFilter : public SrtPacketFilterBase
     int32_t rcv_base;
 
     std::vector<SrtPacket>& m_provided;
+
+    // Use a plain integer for backward compatibility.
+    int32_t m_rcv_msgno_counter;
 
 public:
     static const size_t EXTRA_SIZE = 0;

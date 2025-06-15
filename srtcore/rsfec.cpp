@@ -48,6 +48,7 @@ RSFecFilter::RSFecFilter(const SrtFilterInitializer& init, vector<SrtPacket>& pr
     , snd()
     , rcv_base(CSeqNo::incseq(rcvISN()))
     , m_provided(provided)
+    , m_rcv_msgno_counter(1) // Initialize the message number counter
 {
     if (!ParseFilterConfig(confstr, cfg))
         throw CUDTException(MJ_NOTSUP, MN_INVAL, 0);
@@ -125,10 +126,8 @@ bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
         return false;
     }
     pkt = snd.parity[snd.next_parity++];
-    // mark as filter control packet in case the caller bypasses the
-    // PacketFilter wrapper
-    pkt.hdr[SRT_PH_MSGNO] = SRT_MSGNO_CONTROL |
-        MSGNO_PACKET_BOUNDARY::wrap(PB_SOLO);
+    // mark as filter control packet, using manual bit-shift for compatibility
+    pkt.hdr[SRT_PH_MSGNO] = SRT_MSGNO_CONTROL | (uint32_t(PB_SOLO) << 29);
     pkt.hdr[SRT_PH_ID] = socketID();
     return true;
 }
@@ -196,6 +195,7 @@ bool RSFecFilter::receive(const CPacket& pkt, loss_seqs_t& loss)
                 if (!g.have_parity[p])
                     eras.push_back(m_k + p);
 
+            bool decoding_succeeded = true;
             std::vector<unsigned char> column(m_k + m_m);
             for (size_t j = 0; j < payloadSize(); ++j) {
                 for (int i = 0; i < m_k; ++i)
@@ -208,24 +208,34 @@ bool RSFecFilter::receive(const CPacket& pkt, loss_seqs_t& loss)
                     eras_pos[e] = eras[e];
                 int res = decode_rs_char(m_rs, column.data(), eras_pos, (int)eras.size());
                 if (res >= 0) {
-                    for (int i_idx = 0; i_idx < (int)miss.size(); ++i_idx) {
+                    for (size_t i_idx = 0; i_idx < miss.size(); ++i_idx) {
                         int di = miss[i_idx];
                         g.data[di][j] = column[di];
                     }
                 } else {
-                    break; // decoding failed
+                    decoding_succeeded = false; // decoding failed
+                    break;
                 }
             }
 
-            // supply rebuilt packets
-            for (int di : miss) {
-                SrtPacket p(payloadSize());
-                p.length = payloadSize();
-                p.hdr[SRT_PH_SEQNO] = CSeqNo::incseq(g.base, di);
-                p.hdr[SRT_PH_TIMESTAMP] = g.timestamp;
-                memcpy(p.buffer, &g.data[di][0], payloadSize());
-                m_provided.push_back(p);
-                g.have_data[di] = true;
+            // supply rebuilt packets only if the entire decoding was successful
+            if (decoding_succeeded) {
+                for (int di : miss) {
+                    SrtPacket p(payloadSize());
+                    p.length = payloadSize();
+                    p.hdr[SRT_PH_SEQNO] = CSeqNo::incseq(g.base, di);
+                    p.hdr[SRT_PH_TIMESTAMP] = g.timestamp;
+
+                    // Manually increment and set message number and boundary flag for compatibility
+                    ++m_rcv_msgno_counter;
+                    m_rcv_msgno_counter &= 0x1FFFFFFF; // Wrap around for the 29-bit message number
+                    const uint32_t boundary_flag = (uint32_t)PB_SOLO << 29;
+                    p.hdr[SRT_PH_MSGNO] = m_rcv_msgno_counter | boundary_flag;
+
+                    memcpy(p.buffer, &g.data[di][0], payloadSize());
+                    m_provided.push_back(p);
+                    g.have_data[di] = true;
+                }
             }
         }
 
