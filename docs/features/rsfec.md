@@ -17,3 +17,17 @@ The latency must be large enough to cover the time required to transmit all pack
 ## Additional parameters
 
 `timeout` sets a timeout in milliseconds for completing a block. If fewer than `k` packets arrive within this time, the partial block is flushed without parity. Default is `0` (disabled).
+
+## Building
+
+Support for the `rsfec` packet filter is compiled into the library when the
+[libfec](https://github.com/quiet/libfec) development files are available.
+On Debian and Ubuntu based systems install them with:
+
+```shell
+sudo apt install libfec-dev libfec0
+```
+
+`cmake` or the `configure` script will automatically enable `ENABLE_RSFEC` when
+`libfec` is found. If the library is missing the packet filter is disabled and
+peers using it will not interoperate correctly.

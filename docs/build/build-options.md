@@ -29,6 +29,8 @@ Option details are given further below.
 | [`CYGWIN_USE_POSIX`](#cygwin_use_posix)                      | 1.2.0 | `BOOL`    | OFF        | Determines when to compile on Cygwin using POSIX API.                                                                                                |
 | [`ENABLE_APPS`](#enable_apps)                                | 1.3.3 | `BOOL`    | ON         | Enables compiling sample applications (`srt-live-transmit`, etc.).                                                                                   |
 | [`ENABLE_BONDING`](#enable_bonding)                          | 1.5.0 | `BOOL`    | OFF        | Enables the [Connection Bonding](../features/bonding-quick-start.md) feature.                                                                        |
+| [`ENABLE_RSFEC`](#enable_rsfec)                              | 1.6.0 | `BOOL`    | ON         | Enables the Reed-Solomon packet filter when `libfec` is available.
+|       |
 | [`ENABLE_CXX_DEPS`](#enable_cxx_deps)                        | 1.3.2 | `BOOL`    | OFF        | The `pkg-confg` file (`srt.pc`) will be generated with the `libstdc++` library as a dependency.                                                      |
 | [`ENABLE_CXX11`](#enable_cxx11)                              | 1.2.0 | `BOOL`    | ON         | Enable compiling in C++11 mode for those parts that may require it. Default: ON except for GCC<4.7                                                   |
 | [`ENABLE_CODE_COVERAGE`](#enable_code_coverage)              | 1.4.0 | `BOOL`    | OFF        | Enables instrumentation for code coverage.                                                                                                           |
@@ -205,6 +207,18 @@ Two modes are supported:
 - [Main/Backup](../features/bonding-main-backup.md) - In *Main/Backup* mode, only one (main) link at a time is used for data transmission while other (backup) connections are on standby to ensure the transmission will continue if the main link fails. The goal of Main/Backup mode is to identify a potential link break before it happens, thus providing a time window within which to seamlessly switch to one of the backup links.
 
 With the Connection Bonding feature disabled, [bonding API functions](../API/API-functions.md#socket-group-management) are present, but return an error.
+
+[:arrow_up: &nbsp; Back to List of Build Options](#list-of-build-options)
+
+
+#### ENABLE_RSFEC
+**`--enable-rsfec`** (default: ON)
+
+Build the experimental Reed-Solomon packet filter. This requires the
+[libfec](https://github.com/quiet/libfec) development package. When enabled the
+library can transparently encode and decode parity packets by specifying
+`packetfilter=rsfec` or using the `SRTO_PACKETFILTER` socket option.
+
 
 
 #### ENABLE_CXX_DEPS
