@@ -18,7 +18,8 @@ Here is a link to a demo showing how CMake can be used to build SRT:
 ```shell
 sudo apt-get update
 sudo apt-get upgrade
-sudo apt-get install tclsh pkg-config cmake libssl-dev build-essential
+sudo apt-get install tclsh pkg-config cmake libssl-dev build-essential \
+    libfec-dev libfec0
 ./configure
 make
 ```
