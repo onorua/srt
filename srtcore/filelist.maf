@@ -20,6 +20,7 @@ logging.cpp
 md5.cpp
 packet.cpp
 packetfilter.cpp
+fec_rs.cpp
 queue.cpp
 congctl.cpp
 socketconfig.cpp
@@ -79,6 +80,7 @@ stats.h
 threadname.h
 tsbpd_time.h
 utilities.h
+fec_rs.h
 window.h
 
 PRIVATE HEADERS - ENABLE_BONDING
