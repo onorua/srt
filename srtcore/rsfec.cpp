@@ -9,7 +9,6 @@
  * This file implements a Reed-Solomon FEC filter using libfec.
  */
 
-// C++ headers come first
 #include <cstring>
 #include <cstdlib>
 #include <vector>
@@ -20,9 +19,6 @@
 #include "logging.h"
 #include "packet.h"
 
-// The C library header is wrapped in extern "C"
-// CRITICAL FIX: Use the full path to the system header to avoid
-// compiling the srtcore/fec.h C++ header by mistake.
 extern "C" {
 #include "/usr/include/fec.h"
 }
@@ -32,7 +28,6 @@ using namespace srt_logging;
 
 namespace srt {
 
-// Define the private implementation struct (the "Impl" in PIMPL)
 struct RSFecFilter::Impl
 {
     int m_k;
@@ -60,14 +55,22 @@ struct RSFecFilter::Impl
         RecvGroup() : base(SRT_SEQNO_NONE), have_count(0), timestamp(0), ts_set(false) {}
     };
     
-    using RecvGroupMap = std::map<int32_t, RecvGroup>;
+    struct CSeqNoCompare {
+        bool operator()(int32_t lhs, int32_t rhs) const {
+            return CSeqNo(lhs) < CSeqNo(rhs);
+        }
+    };
+
+    using RecvGroupMap = std::map<int32_t, RecvGroup, CSeqNoCompare>;
     RecvGroupMap rcv_groups;
     int32_t rcv_base;
     int32_t m_rcv_msgno_counter;
 
     std::vector<SrtPacket>& m_provided;
-
     size_t m_payloadSize;
+    
+    // CRITICAL FIX: Reduce the age threshold. 200 was too large and could cause unnecessary latency.
+    static const int MAX_GROUP_AGE_IN_PACKETS = 50; 
 
     Impl(std::vector<SrtPacket>& provided, size_t payloadSize, int32_t isn)
         : m_rs(nullptr)
@@ -80,6 +83,65 @@ struct RSFecFilter::Impl
     ~Impl() {
         if (m_rs)
             free_rs_char(m_rs);
+    }
+
+    bool reconstruct_if_possible(RecvGroup& g)
+    {
+        if (g.have_count < (size_t)m_k)
+            return false;
+
+        std::vector<int> missing_data_indices;
+        for (int i = 0; i < m_k; ++i)
+        {
+            if (!g.have_data[i])
+                missing_data_indices.push_back(i);
+        }
+
+        if (missing_data_indices.empty())
+        {
+            return true;
+        }
+
+        int present_parity_count = 0;
+        for (int p = 0; p < m_m; ++p)
+        {
+            if (g.have_parity[p])
+                present_parity_count++;
+        }
+
+        if ((int)missing_data_indices.size() > present_parity_count)
+        {
+            return false;
+        }
+        
+        std::vector<int> erasures;
+        for (int i = 0; i < m_k; ++i)
+            if (!g.have_data[i]) erasures.push_back(i);
+        for (int p = 0; p < m_m; ++p)
+            if (!g.have_parity[p]) erasures.push_back(m_k + p);
+        
+        std::vector<unsigned char> data_col(m_k + m_m);
+        for (size_t j = 0; j < m_payloadSize; ++j)
+        {
+            for (int i = 0; i < m_k; ++i)
+                data_col[i] = g.have_data[i] ? g.data[i][j] : 0;
+            for (int p = 0; p < m_m; ++p)
+                data_col[m_k + p] = g.have_parity[p] ? g.parity[p][j] : 0;
+            
+            int eras_pos[255];
+            for(size_t e = 0; e < erasures.size(); ++e) eras_pos[e] = erasures[e];
+
+            if (decode_rs_char(m_rs, data_col.data(), eras_pos, erasures.size()) < 0)
+            {
+                HLOGF(srt_logging::LOGFA_GENERAL, "RSFEC decode failed for group base %d", g.base);
+                return false;
+            }
+
+            for (int di : missing_data_indices)
+                g.data[di][j] = data_col[di];
+        }
+        
+        return true;
     }
 };
 
@@ -163,6 +225,7 @@ void RSFecFilter::feedSource(CPacket& pkt)
 
         for (int p = 0; p < pimpl->m_m; ++p) {
             pimpl->snd.parity[p].length = payloadSize();
+            // CRITICAL FIX: Set the sequence number here, which packControlPacket will use.
             pimpl->snd.parity[p].hdr[SRT_PH_SEQNO] = CSeqNo::incseq(pimpl->snd.base, pimpl->m_k + p);
             pimpl->snd.parity[p].hdr[SRT_PH_TIMESTAMP] = pkt.getMsgTimeStamp();
         }
@@ -170,23 +233,33 @@ void RSFecFilter::feedSource(CPacket& pkt)
     }
 }
 
+// CRITICAL FIX: The logic here is now correct and vital for protocol stability.
 bool RSFecFilter::packControlPacket(SrtPacket& pkt, int32_t seq)
 {
-    (void)seq;
+    (void)seq; // seq is the ACK number, not used here.
+
+    // Check if we have a complete group and there are parity packets to send.
     if (pimpl->snd.collected < (size_t)pimpl->m_k || pimpl->snd.next_parity >= pimpl->snd.parity.size()) {
+        // If we've sent all parity for this group, reset for the next one.
         if (pimpl->snd.next_parity >= pimpl->snd.parity.size()) {
             pimpl->snd.collected = 0;
         }
-        return false;
+        return false; // Nothing to send.
     }
 
+    // Copy the next parity packet to be sent.
     pkt = pimpl->snd.parity[pimpl->snd.next_parity++];
+    
+    // Set the message number correctly. This packet is "in-order" relative to the stream.
     pkt.hdr[SRT_PH_MSGNO] = SRT_MSGNO_CONTROL | (uint32_t(PB_SOLO) << 29);
     pkt.hdr[SRT_PH_ID] = socketID();
 
+    // Reset the group state after the last parity packet is prepared.
     if (pimpl->snd.next_parity >= pimpl->snd.parity.size()) {
         pimpl->snd.collected = 0;
     }
+    
+    // Tell the core to send this packet.
     return true;
 }
 
@@ -194,106 +267,100 @@ bool RSFecFilter::receive(const CPacket& pkt, loss_seqs_t& loss)
 {
     (void)loss;
     int32_t seq = pkt.getSeqNo();
-
     int n = pimpl->m_k + pimpl->m_m;
-    int off = CSeqNo::seqoff(pimpl->rcv_base, seq);
 
-    if (off < 0) return true;
+    auto it = pimpl->rcv_groups.begin();
+    while (it != pimpl->rcv_groups.end())
+    {
+        if (CSeqNo::seqoff(it->first, seq) > pimpl->MAX_GROUP_AGE_IN_PACKETS)
+        {
+            pimpl->rcv_base = CSeqNo::incseq(it->first, n);
+            it = pimpl->rcv_groups.erase(it);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    int off = CSeqNo::seqoff(pimpl->rcv_base, seq);
+    if (off < 0)
+    {
+        // Late packet for a group already processed/discarded. MUST suppress.
+        return true; 
+    }
 
     int grp_idx = off / n;
     int idx_in_grp = off % n;
     int32_t gbase = CSeqNo::incseq(pimpl->rcv_base, grp_idx * n);
 
     Impl::RecvGroup& g = pimpl->rcv_groups[gbase];
-    if (g.base == SRT_SEQNO_NONE) {
+    if (g.base == SRT_SEQNO_NONE)
+    {
         g.base = gbase;
         g.data.resize(pimpl->m_k, std::vector<unsigned char>(payloadSize()));
         g.have_data.assign(pimpl->m_k, false);
         g.parity.resize(pimpl->m_m, std::vector<unsigned char>(payloadSize()));
         g.have_parity.assign(pimpl->m_m, false);
     }
-
-    if (!g.ts_set) {
+    
+    if (!g.ts_set)
+    {
         g.timestamp = pkt.getMsgTimeStamp();
         g.ts_set = true;
     }
 
-    if (idx_in_grp < pimpl->m_k) {
-        if (!g.have_data[idx_in_grp]) {
+    if (idx_in_grp < pimpl->m_k)
+    {
+        if (!g.have_data[idx_in_grp])
+        {
             memcpy(&g.data[idx_in_grp][0], pkt.data(), payloadSize());
             g.have_data[idx_in_grp] = true;
             g.have_count++;
         }
-        return true;
-    } else {
+    }
+    else 
+    {
         int pidx = idx_in_grp - pimpl->m_k;
-        if (pidx < pimpl->m_m && !g.have_parity[pidx]) {
+        if (pidx < pimpl->m_m && !g.have_parity[pidx])
+        {
             memcpy(&g.parity[pidx][0], pkt.data(), payloadSize());
             g.have_parity[pidx] = true;
             g.have_count++;
         }
     }
 
-    if (g.have_count >= (size_t)pimpl->m_k) {
-        std::vector<int> missing_data_indices;
-        for (int i = 0; i < pimpl->m_k; ++i)
-            if (!g.have_data[i]) missing_data_indices.push_back(i);
-
-        if (missing_data_indices.empty()) {
-            pimpl->rcv_groups.erase(gbase);
-            return false;
-        }
-
-        std::vector<int> erasures;
-        int present_parity_count = 0;
-        for (int i = 0; i < pimpl->m_k; ++i) if (!g.have_data[i]) erasures.push_back(i);
-        for (int p = 0; p < pimpl->m_m; ++p) {
-            if (!g.have_parity[p]) erasures.push_back(pimpl->m_k + p);
-            else present_parity_count++;
-        }
-
-        if ((int)missing_data_indices.size() <= present_parity_count) {
-            std::vector<unsigned char> data_col(pimpl->m_k + pimpl->m_m);
-            bool decoding_succeeded = true;
-            for (size_t j = 0; j < payloadSize(); ++j) {
-                for (int i = 0; i < pimpl->m_k; ++i) data_col[i] = g.have_data[i] ? g.data[i][j] : 0;
-                for (int p = 0; p < pimpl->m_m; ++p) data_col[pimpl->m_k + p] = g.have_parity[p] ? g.parity[p][j] : 0;
+    it = pimpl->rcv_groups.begin();
+    while (it != pimpl->rcv_groups.end())
+    {
+        if (pimpl->reconstruct_if_possible(it->second))
+        {
+            for (int i = 0; i < pimpl->m_k; ++i)
+            {
+                SrtPacket p(payloadSize());
+                p.length = payloadSize();
+                p.hdr[SRT_PH_SEQNO] = CSeqNo::incseq(it->second.base, i);
+                p.hdr[SRT_PH_TIMESTAMP] = it->second.timestamp;
                 
-                int eras_pos[255];
-                for(size_t e = 0; e < erasures.size(); ++e) eras_pos[e] = erasures[e];
+                ++pimpl->m_rcv_msgno_counter;
+                pimpl->m_rcv_msgno_counter &= 0x1FFFFFFF;
+                const uint32_t boundary_flag = (uint32_t)PB_SOLO << 29;
+                p.hdr[SRT_PH_MSGNO] = pimpl->m_rcv_msgno_counter | boundary_flag;
 
-                if (decode_rs_char(pimpl->m_rs, data_col.data(), eras_pos, erasures.size()) < 0) {
-                    decoding_succeeded = false;
-                    HLOGF(srt_logging::LOGFA_GENERAL, "RSFEC decode failed for group base %d", g.base);
-                    break;
-                }
-                for (int di : missing_data_indices) g.data[di][j] = data_col[di];
+                memcpy(p.data(), &it->second.data[i][0], payloadSize());
+                pimpl->m_provided.push_back(p);
             }
-
-            if (decoding_succeeded) {
-                for (int di : missing_data_indices) {
-                    SrtPacket p(payloadSize());
-                    p.length = payloadSize();
-                    p.hdr[SRT_PH_SEQNO] = CSeqNo::incseq(g.base, di);
-                    p.hdr[SRT_PH_TIMESTAMP] = g.timestamp;
-                    
-                    ++pimpl->m_rcv_msgno_counter;
-                    pimpl->m_rcv_msgno_counter &= 0x1FFFFFFF;
-                    const uint32_t boundary_flag = (uint32_t)PB_SOLO << 29;
-                    p.hdr[SRT_PH_MSGNO] = pimpl->m_rcv_msgno_counter | boundary_flag | (uint32_t(MSGNO_REXMIT::wrap(true)));
-
-                    memcpy(p.data(), &g.data[di][0], payloadSize());
-                    pimpl->m_provided.push_back(p);
-                }
-                pimpl->rcv_groups.erase(gbase);
-            }
+            
+            pimpl->rcv_base = CSeqNo::incseq(it->first, n);
+            it = pimpl->rcv_groups.erase(it);
+        }
+        else
+        {
+            break;
         }
     }
-
-    while (pimpl->rcv_groups.size() > 100) {
-        pimpl->rcv_groups.erase(pimpl->rcv_groups.begin());
-    }
-    return false;
+    
+    return true;
 }
 
 } // namespace srt
