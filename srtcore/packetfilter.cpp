@@ -18,6 +18,7 @@
 
 #include "packetfilter.h"
 #include "packetfilter_builtin.h"
+#include "fec_rs.h"
 #include "core.h"
 #include "packet.h"
 #include "logging.h"
@@ -314,6 +315,8 @@ PacketFilter::Internal::Internal()
 
     m_filters["fec"] = new PacketFilter::Creator<FECFilterBuiltin>;
     m_builtin_filters.insert("fec");
+    m_filters["fec_rs"] = new PacketFilter::Creator<FECFilterRS>;
+    m_builtin_filters.insert("fec_rs");
 }
 
 bool PacketFilter::configure(CUDT* parent, CUnitQueue* uq, const std::string& confstr)
