@@ -795,6 +795,7 @@ shuffle(gf *pkt[], int index[], int k)
 static gf *
 build_decode_matrix(struct fec_parms *code, gf *pkt[], int index[])
 {
+    (void)pkt;
     int i , k = code->k ;
     gf *p, *matrix = NEW_GF_MATRIX(k, k);
 
