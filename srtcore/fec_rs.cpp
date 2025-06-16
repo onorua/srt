@@ -188,6 +188,7 @@ void FECFilterRS::attemptDecode(RecvGroup& g)
 
 bool FECFilterRS::receive(const CPacket& pkt, loss_seqs_t& loss)
 {
+    (void)loss;
     if (pkt.getMsgSeq() == SRT_MSGNO_CONTROL) {
         const unsigned char* p = (const unsigned char*)pkt.data();
         unsigned idx = p[0];
