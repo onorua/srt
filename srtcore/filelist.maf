@@ -20,6 +20,9 @@ logging.cpp
 md5.cpp
 packet.cpp
 packetfilter.cpp
+fec_rs.cpp
+rs/fec.cpp
+rs/rs.cpp
 queue.cpp
 congctl.cpp
 socketconfig.cpp

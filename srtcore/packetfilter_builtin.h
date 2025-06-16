@@ -14,5 +14,6 @@
 
 // Integration header
 #include "fec.h"
+#include "fec_rs.h"
 
 #endif
