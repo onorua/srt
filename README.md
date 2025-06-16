@@ -174,6 +174,8 @@ In live streaming configurations, the SRT protocol maintains a constant end-to-e
   * C++11: standard library (`std` by [`-DENABLE_STDCXX_SYNC=ON`](./docs/build/build-options.md#enable_stdcxx_sync) CMake option),
   * C++03: Pthreads (for POSIX systems it's built in, for Windows there is a ported library).
 * Tcl 8.5 is optional and is used by `./configure` script. Otherwise, use CMake directly.
+* Install `libfec0` when building with the Reed-Solomon packet filter
+  (`apt install libfec0`).
 
 ### Build Options
 
