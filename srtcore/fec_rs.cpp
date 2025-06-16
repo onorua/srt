@@ -37,6 +37,7 @@ bool FECFilterRS::verifyConfig(const SrtFilterConfig& cfg, string& err)
 FECFilterRS::FECFilterRS(const SrtFilterInitializer& init, std::vector<SrtPacket>& provided, const string& conf)
     : SrtPacketFilterBase(init)
 {
+    (void)provided;
     SrtFilterConfig cfg;
     ParseFilterConfig(conf, cfg);
     m_cols      = atoi(map_get(cfg.parameters, "cols").c_str());

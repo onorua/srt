@@ -434,6 +434,17 @@ void SrtCommon::ConnectClient(string host, int port)
     stat = ConfigurePost(m_sock);
     if ( stat == SRT_ERROR )
         Error("ConfigurePost");
+
+    if (m_output_direction)
+    {
+        int payload = 0;
+        int optlen = sizeof payload;
+        if (srt_getsockopt(m_sock, 0, SRTO_PAYLOADSIZE, &payload, &optlen) == 0 && payload > 0)
+        {
+            if ((unsigned long)payload < transmit_chunk_size)
+                transmit_chunk_size = payload;
+        }
+    }
 }
 
 void SrtCommon::Error(string src)
