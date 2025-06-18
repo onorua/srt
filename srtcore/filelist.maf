@@ -12,6 +12,7 @@ core.cpp
 crypto.cpp
 epoll.cpp
 fec.cpp
+SOURCES - ENABLE_RSFEC
 fec_rs.cpp
 handshake.cpp
 list.cpp
@@ -81,6 +82,7 @@ threadname.h
 tsbpd_time.h
 utilities.h
 window.h
+PRIVATE HEADERS - ENABLE_RSFEC
 fec_rs.h
 
 PRIVATE HEADERS - ENABLE_BONDING
