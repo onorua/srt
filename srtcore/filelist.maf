@@ -12,6 +12,7 @@ core.cpp
 crypto.cpp
 epoll.cpp
 fec.cpp
+fec_rs.cpp
 handshake.cpp
 list.cpp
 logger_default.cpp
@@ -80,6 +81,7 @@ threadname.h
 tsbpd_time.h
 utilities.h
 window.h
+fec_rs.h
 
 PRIVATE HEADERS - ENABLE_BONDING
 group.h
