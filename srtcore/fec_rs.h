@@ -19,6 +19,9 @@ class FECReedSolomon : public SrtPacketFilterBase
     size_t data_shards;
     size_t parity_shards;
     std::vector<SrtPacket>& provided_packets;
+    std::vector<std::vector<uint8_t>> _src_buf;   // k data shards
+    uint32_t                            _grp_sn   = 0;      // FEC-group sequence number
+    size_t                              _max_len  = 0;      // longest user payload seen so far
 
 public:
     FECReedSolomon(const SrtFilterInitializer& init,
