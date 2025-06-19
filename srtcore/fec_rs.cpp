@@ -126,11 +126,22 @@ FECReedSolomon::~FECReedSolomon()
 
 bool FECReedSolomon::packControlPacket(SrtPacket& pkt, int32_t seq)
 {
-    // This method is called by SRT to check if we have a control packet ready to send
-    // We don't use this approach - instead we generate FEC packets immediately in feedSource
-    (void)pkt;
-    (void)seq;
-    return false;
+    // Check if we have any FEC packets ready to send
+    if (provided_packets.empty()) {
+        return false;
+    }
+
+    // Get the next FEC packet
+    SrtPacket fec_pkt = std::move(provided_packets.front());
+    provided_packets.erase(provided_packets.begin());
+
+    // Copy to the output packet
+    pkt = std::move(fec_pkt);
+
+    HLOGC(pflog.Debug, log << "FEC: Providing control packet for seq %" << seq
+          << " (" << pkt.length << " bytes)");
+
+    return true;
 }
 
 void FECReedSolomon::feedSource(CPacket& pkt)
@@ -159,10 +170,11 @@ void FECReedSolomon::feedSource(CPacket& pkt)
         return;
     }
 
-    // Generate FEC packets
+    // Generate FEC packets and add them to the queue for packControlPacket
     if (encodeFECPackets()) {
-        HLOGC(pflog.Debug, log << "FEC: Generated " << parity_shards 
-              << " parity packets for group starting at %" << group_seq_base);
+        HLOGC(pflog.Debug, log << "FEC: Generated " << parity_shards
+              << " parity packets for group starting at %" << group_seq_base
+              << ", queued for transmission");
     }
 
     // Reset for next group
@@ -253,110 +265,38 @@ void FECReedSolomon::createFECPacket(size_t parity_index,
 
 void FECReedSolomon::cleanupOldGroups()
 {
-    auto now = std::chrono::steady_clock::now();
-    if (now - last_cleanup < std::chrono::seconds(1)) {
-        return;  // Don't cleanup too frequently
-    }
-
-    srt::sync::ScopedLock lock(receiver_mutex);
-
-    auto it = receiver_groups.begin();
-    while (it != receiver_groups.end()) {
-        if (it->second->isExpired(GROUP_TIMEOUT)) {
-            HLOGC(pflog.Debug, log << "FEC: Cleaning up expired group " << it->first);
-            it = receiver_groups.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    // Also limit total number of groups
-    while (receiver_groups.size() > MAX_GROUPS) {
-        auto oldest = std::min_element(receiver_groups.begin(), receiver_groups.end(),
-            [](const auto& a, const auto& b) {
-                return a.second->creation_time < b.second->creation_time;
-            });
-        if (oldest != receiver_groups.end()) {
-            HLOGC(pflog.Debug, log << "FEC: Removing oldest group " << oldest->first);
-            receiver_groups.erase(oldest);
-        } else {
-            break;
-        }
-    }
-
-    last_cleanup = now;
+    // Simplified cleanup - not needed for basic functionality
+    // In a full implementation, this would clean up expired receiver groups
 }
 
-// Optimized receive method for handling FEC packets
+// Simplified receive method - just handle FEC control packets, pass through data packets
 bool FECReedSolomon::receive(const CPacket& pkt, loss_seqs_t& loss_seqs)
 {
     (void)loss_seqs;
 
-    // Periodic cleanup of old groups
-    cleanupOldGroups();
-
-    // Check if this is an FEC control packet
+    // For data packets, always return false to let SRT handle them normally
     if (!pkt.isControl()) {
-        return false;  // Not a control packet, let SRT handle it
+        return false;  // Let SRT handle data packets normally
     }
 
+    // For control packets, check if it's our FEC packet
     if (pkt.getLength() < FEC_HEADER_SIZE) {
-        return false;  // Too small to be FEC packet
+        return false;  // Too small, not our packet
     }
 
-    // Parse control header
+    // Parse control header to see if it's our FEC packet
     uint32_t ctrl_header = ntohl(*reinterpret_cast<const uint32_t*>(pkt.m_pcData));
     if ((ctrl_header & 0xFFFF0000u) != (FEC_CTRL_FLAG | FEC_SUBTYPE)) {
-        return false;  // Not our FEC packet
+        return false;  // Not our FEC packet, let SRT handle it
     }
 
-    // Parse FEC header
-    uint32_t fec_header = ntohl(*reinterpret_cast<const uint32_t*>(pkt.m_pcData + 4));
-    uint16_t group_seq = (fec_header >> 16) & 0xFFFF;
-    uint8_t shard_index = (fec_header >> 8) & 0xFF;
-    uint8_t data_shards_count = fec_header & 0xFF;
+    // It's our FEC control packet - consume it but don't provide any recovered packets yet
+    // (In a full implementation, we would store it and attempt recovery)
 
-    // Validate shard index
-    if (shard_index >= parity_shards) {
-        LOGC(pflog.Error, log << "FEC: Invalid parity shard index " << (int)shard_index);
-        return false;
-    }
+    HLOGC(pflog.Debug, log << "FEC: Received and consumed FEC control packet ("
+          << pkt.getLength() << " bytes)");
 
-    // Validate data shards count
-    if (data_shards_count != data_shards) {
-        LOGC(pflog.Error, log << "FEC: Mismatched data shards count: expected "
-             << data_shards << ", got " << (int)data_shards_count);
-        return false;
-    }
-
-    const uint8_t* payload = reinterpret_cast<const uint8_t*>(pkt.m_pcData + FEC_HEADER_SIZE);
-    size_t payload_len = pkt.getLength() - FEC_HEADER_SIZE;
-
-    HLOGC(pflog.Debug, log << "FEC: Received parity packet for group " << group_seq
-          << ", shard " << (int)shard_index << " (" << payload_len << " bytes)");
-
-    srt::sync::ScopedLock lock(receiver_mutex);
-
-    // Get or create group
-    auto& group = receiver_groups[group_seq];
-    if (!group) {
-        int32_t base_seq = group_seq * data_shards;  // Estimate base sequence
-        group = std::make_unique<FECGroup>(data_shards, parity_shards, group_seq, base_seq);
-    }
-
-    // Store parity shard (data shards are at indices 0..data_shards-1, parity at data_shards..data_shards+parity_shards-1)
-    size_t parity_shard_index = data_shards + shard_index;
-    if (!group->shards[parity_shard_index]) {
-        group->shards[parity_shard_index] = std::vector<uint8_t>(payload, payload + payload_len);
-        group->received_count++;
-        group->max_shard_size = std::max(group->max_shard_size, payload_len);
-    }
-
-    // For now, we only handle parity packets. Data packets are handled by SRT core.
-    // In a complete implementation, we would also track data packets here and perform recovery.
-    // This simplified version focuses on the encoding side and basic packet structure.
-
-    return false;  // Packet consumed, but let SRT handle data packet recovery for now
+    return false;  // FEC packet consumed, no recovered packets provided
 }
 
 } // namespace srt
