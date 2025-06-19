@@ -3,7 +3,6 @@
 
 #include <string>
 #include <vector>
-#include </usr/include/fec.h>
 
 #include "packetfilter_api.h"
 #include "packet.h"
