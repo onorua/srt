@@ -12,6 +12,7 @@
 #define INC_SRT_PACKETFILTER_API_H
 
 #include "platform_sys.h"
+#include "srt.h"
 
 #include <cstring>
 #include <string>

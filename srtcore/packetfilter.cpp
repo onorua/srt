@@ -15,6 +15,7 @@
 #include <vector>
 #include <deque>
 #include <iterator>
+#include <cstdio>
 
 #include "packetfilter.h"
 #include "packetfilter_builtin.h"
@@ -314,6 +315,9 @@ PacketFilter::Internal::Internal()
 
     m_filters["fec"] = new PacketFilter::Creator<FECFilterBuiltin>;
     m_builtin_filters.insert("fec");
+
+    m_filters["udpspeeder"] = new PacketFilter::Creator<UDPspeederFilter>;
+    m_builtin_filters.insert("udpspeeder");
 }
 
 bool PacketFilter::configure(CUDT* parent, CUnitQueue* uq, const std::string& confstr)
@@ -358,15 +362,27 @@ bool PacketFilter::configure(CUDT* parent, CUnitQueue* uq, const std::string& co
 
 bool PacketFilter::correctConfig(const SrtFilterConfig& conf)
 {
+    // Check if type is specified in parameters (legacy support)
     const string* pname = map_getp(conf.parameters, "type");
 
-    if (!pname)
+    string filter_type;
+    if (pname)
+    {
+        filter_type = *pname;
+    }
+    else
+    {
+        // Use the type field from the config structure
+        filter_type = conf.type;
+    }
+
+    if (filter_type.empty())
         return true; // default, parameters ignored
 
-    if (*pname == "adaptive")
+    if (filter_type == "adaptive")
         return true;
 
-    PacketFilter::Factory *factory = internal().find(*pname);
+    PacketFilter::Factory *factory = internal().find(filter_type);
     if (factory == NULL)
         return false;
 
