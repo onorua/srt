@@ -28,6 +28,8 @@ srt_compat.c
 strerror_defs.cpp
 sync.cpp
 tsbpd_time.cpp
+udpspeeder.cpp
+udpspeeder_rs.cpp
 window.cpp
 
 SOURCES - ENABLE_BONDING
@@ -78,6 +80,7 @@ srt_compat.h
 stats.h
 threadname.h
 tsbpd_time.h
+udpspeeder.h
 utilities.h
 window.h
 
