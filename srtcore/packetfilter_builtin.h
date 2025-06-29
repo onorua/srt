@@ -14,6 +14,6 @@
 
 // Integration header
 #include "fec.h"
-#include "udpspeeder.h"
+#include "rsfec.h"
 
 #endif
