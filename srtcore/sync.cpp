@@ -17,6 +17,7 @@
 #include "srt_compat.h"
 #include "logging.h"
 #include "common.h"
+#include "performance_profiler.h"
 
 // HAVE_CXX11 is defined in utilities.h, included with common.h. 
 // The following conditional inclusion must go after common.h.

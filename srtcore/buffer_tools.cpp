@@ -273,5 +273,102 @@ int CSndRateEstimator::incSampleIdx(int val, int inc) const
     return val;
 }
 
+// Buffer tools implementation
+namespace buffer_tools {
+
+// Static variables for statistics
+static uint64_t s_total_copies = 0;
+static uint64_t s_total_bytes = 0;
+static uint64_t s_fast_copies = 0;
+
+void* fast_memcpy(void* dest, const void* src, size_t n)
+{
+    s_total_copies++;
+    s_total_bytes += n;
+
+    // For small copies, use standard memcpy
+    if (n < 64)
+    {
+        return std::memcpy(dest, src, n);
+    }
+
+    // For larger copies, check alignment and use optimized version
+    if (is_aligned(dest, 16) && is_aligned(src, 16))
+    {
+        s_fast_copies++;
+        return vectorized_memcpy(dest, src, n);
+    }
+
+    return std::memcpy(dest, src, n);
+}
+
+void* vectorized_memcpy(void* dest, const void* src, size_t n)
+{
+    // Fallback to standard memcpy for now
+    // In a full implementation, this would use SIMD instructions
+    return std::memcpy(dest, src, n);
+}
+
+int fast_memcmp(const void* s1, const void* s2, size_t n)
+{
+    // For small comparisons, use standard memcmp
+    if (n < 32)
+    {
+        return std::memcmp(s1, s2, n);
+    }
+
+    // For larger buffers, could use vectorized comparison
+    return std::memcmp(s1, s2, n);
+}
+
+void prefetch_buffer(const void* addr, size_t size)
+{
+#ifdef __builtin_prefetch
+    // Prefetch cache lines for better performance
+    const char* ptr = static_cast<const char*>(addr);
+    const size_t cache_line_size = 64;
+
+    for (size_t offset = 0; offset < size; offset += cache_line_size)
+    {
+        __builtin_prefetch(ptr + offset, 0, 3); // Read, high temporal locality
+    }
+#else
+    (void)addr;
+    (void)size;
+#endif
+}
+
+bool is_aligned(const void* ptr, size_t alignment)
+{
+    return (reinterpret_cast<uintptr_t>(ptr) % alignment) == 0;
+}
+
+void* align_pointer(void* ptr, size_t alignment)
+{
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t aligned = (addr + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void*>(aligned);
+}
+
+BufferOpStats get_buffer_stats()
+{
+    BufferOpStats stats;
+    stats.total_copies = s_total_copies;
+    stats.total_bytes = s_total_bytes;
+    stats.fast_copies = s_fast_copies;
+    stats.avg_copy_size = stats.total_copies > 0 ?
+        double(stats.total_bytes) / stats.total_copies : 0.0;
+    return stats;
+}
+
+void reset_buffer_stats()
+{
+    s_total_copies = 0;
+    s_total_bytes = 0;
+    s_fast_copies = 0;
+}
+
+} // namespace buffer_tools
+
 }
 

@@ -30,6 +30,8 @@ sync.cpp
 tsbpd_time.cpp
 rsfec.cpp
 rsfec_rs.cpp
+memory_monitor.cpp
+performance_profiler.cpp
 window.cpp
 
 SOURCES - ENABLE_BONDING

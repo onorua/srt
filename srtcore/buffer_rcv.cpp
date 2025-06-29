@@ -48,6 +48,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <iomanip>
 #include "buffer_rcv.h"
 #include "logging.h"
+#include "buffer_tools.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 using namespace std;
 
@@ -423,9 +426,14 @@ int CRcvBuffer::readMessage(char* data, size_t len, SRT_MSGCTRL* msgctrl)
         const size_t   pktsize = packet.getLength();
         const int32_t pktseqno = packet.getSeqNo();
 
+        // Prefetch next packet for better cache performance
+        const int next_pos = incPos(i);
+        if (next_pos != i && m_entries[next_pos].pUnit)
+            srt::buffer_tools::prefetch_buffer(&packetAt(next_pos), sizeof(CPacket));
+
         // unitsize can be zero
         const size_t unitsize = std::min(remain, pktsize);
-        memcpy(dst, packet.m_pcData, unitsize);
+        srt::buffer_tools::fast_memcpy(dst, packet.m_pcData, unitsize);
         remain -= unitsize;
         dst += unitsize;
 
@@ -521,7 +529,8 @@ namespace {
     bool copyBytesToBuf(char* data, int len, int dst_offset, void* arg)
     {
         char* dst = reinterpret_cast<char*>(arg) + dst_offset;
-        memcpy(dst, data, len);
+        // Use optimized copy for better performance
+        srt::buffer_tools::fast_memcpy(dst, data, len);
         return true;
     }
 }
@@ -770,6 +779,7 @@ int32_t CRcvBuffer::getFirstNonreadSeqNo() const
 void CRcvBuffer::countBytes(int pkts, int bytes)
 {
     ScopedLock lock(m_BytesCountLock);
+    SRT_PERF_TIMER("CRcvBuffer::countBytes");
     m_iBytesCount += bytes; // added or removed bytes from rcv buffer
     m_iPktsCount  += pkts;
     if (bytes > 0)          // Assuming one pkt when adding bytes

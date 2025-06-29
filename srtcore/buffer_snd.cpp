@@ -57,6 +57,8 @@ modified by
 #include "packet.h"
 #include "core.h" // provides some constants
 #include "logging.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 namespace srt {
 
@@ -111,22 +113,35 @@ CSndBuffer::CSndBuffer(int ip_family, int size, int maxpld, int authtag)
 
 CSndBuffer::~CSndBuffer()
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::BUFFER_DEALLOCATION);
+
     Block* pb = m_pBlock->m_pNext;
+    int blocks_deleted = 0;
     while (pb != m_pBlock)
     {
         Block* temp = pb;
         pb          = pb->m_pNext;
         delete temp;
+        blocks_deleted++;
+        SRT_TRACK_DEALLOC_CAT(sizeof(Block), srt::memory_monitor::categories::BUFFERS);
     }
     delete m_pBlock;
+    SRT_TRACK_DEALLOC_CAT(sizeof(Block), srt::memory_monitor::categories::BUFFERS);
 
+    int buffers_deleted = 0;
     while (m_pBuffer != NULL)
     {
         Buffer* temp = m_pBuffer;
         m_pBuffer    = m_pBuffer->m_pNext;
+        SRT_TRACK_DEALLOC_CAT(temp->m_iSize * m_iBlockLen, srt::memory_monitor::categories::BUFFERS);
         delete[] temp->m_pcData;
         delete temp;
+        buffers_deleted++;
+        SRT_TRACK_DEALLOC_CAT(sizeof(Buffer), srt::memory_monitor::categories::BUFFERS);
     }
+
+    HLOGC(bslog.Debug, log << "CSndBuffer destroyed: " << blocks_deleted
+          << " blocks, " << buffers_deleted << " buffers");
 
     releaseMutex(m_BufLock);
 }
@@ -684,6 +699,7 @@ int CSndBuffer::dropLateData(int& w_bytes, int32_t& w_first_msgno, const steady_
 
 void CSndBuffer::increase()
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::BUFFER_ALLOCATION);
     int unitsize = m_pBuffer->m_iSize;
 
     // new physical buffer
@@ -691,10 +707,15 @@ void CSndBuffer::increase()
     try
     {
         nbuf           = new Buffer;
+        SRT_TRACK_ALLOC_CAT(sizeof(Buffer), srt::memory_monitor::categories::BUFFERS);
         nbuf->m_pcData = new char[unitsize * m_iBlockLen];
+        SRT_TRACK_ALLOC_CAT(unitsize * m_iBlockLen, srt::memory_monitor::categories::BUFFERS);
     }
     catch (...)
     {
+        if (nbuf) {
+            SRT_TRACK_DEALLOC(sizeof(Buffer));
+        }
         delete nbuf;
         throw CUDTException(MJ_SYSTEMRES, MN_MEMORY, 0);
     }
@@ -712,10 +733,17 @@ void CSndBuffer::increase()
     try
     {
         nblk = new Block;
+        SRT_TRACK_ALLOC_CAT(sizeof(Block), srt::memory_monitor::categories::BUFFERS);
     }
     catch (...)
     {
+        if (nblk) {
+            SRT_TRACK_DEALLOC(sizeof(Block));
+        }
         delete nblk;
+        // Also cleanup the buffer we just allocated
+        delete[] nbuf->m_pcData;
+        delete nbuf;
         throw CUDTException(MJ_SYSTEMRES, MN_MEMORY, 0);
     }
     Block* pb = nblk;
@@ -723,6 +751,7 @@ void CSndBuffer::increase()
     {
         pb->m_pNext = new Block;
         pb          = pb->m_pNext;
+        SRT_TRACK_ALLOC_CAT(sizeof(Block), srt::memory_monitor::categories::BUFFERS);
     }
 
     // insert the new blocks onto the existing one

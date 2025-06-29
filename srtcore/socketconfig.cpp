@@ -61,7 +61,6 @@ int RcvBufferSizeOptionToValue(int val, int flightflag, int mss)
 
     // For very large values, ensure we don't exceed reasonable limits
     const int max_reasonable_packets = 32768; // ~43MB with default MSS
-    const int max_reasonable_bytes = max_reasonable_packets * mssin_size;
 
     int bufsize;
     if (val > mssin_size * CSrtConfig::DEF_MIN_FLIGHT_PKT)
@@ -72,7 +71,7 @@ int RcvBufferSizeOptionToValue(int val, int flightflag, int mss)
     // Clamp to reasonable maximum
     if (bufsize > max_reasonable_packets)
     {
-        LOGC(kmlog.Warn, log << "SRTO_RCVBUF: Requested " << bufsize
+        LOGC(srt_logging::kmlog.Warn, log << "SRTO_RCVBUF: Requested " << bufsize
              << " packets, clamping to " << max_reasonable_packets);
         bufsize = max_reasonable_packets;
     }

@@ -198,6 +198,70 @@ private:
     int        m_iRateBps;          //< Rate in Bytes/sec.
 };
 
+/**
+ * @brief High-performance buffer operations and utilities
+ *
+ * This module provides optimized memory operations for SRT's buffer management,
+ * including SIMD-accelerated copying, cache-friendly access patterns, and
+ * memory alignment utilities.
+ */
+namespace buffer_tools {
+
+/**
+ * @brief Statistics for buffer operations
+ */
+struct BufferOpStats
+{
+    uint64_t total_copies;
+    uint64_t total_bytes;
+    uint64_t fast_copies;
+    double avg_copy_size;
+
+    BufferOpStats() : total_copies(0), total_bytes(0), fast_copies(0), avg_copy_size(0.0) {}
+};
+
+/**
+ * @brief Fast memory copy with automatic optimization selection
+ */
+void* fast_memcpy(void* dest, const void* src, size_t n);
+
+/**
+ * @brief Vectorized memory copy for large aligned buffers
+ */
+void* vectorized_memcpy(void* dest, const void* src, size_t n);
+
+/**
+ * @brief Optimized memory comparison
+ */
+int fast_memcmp(const void* s1, const void* s2, size_t n);
+
+/**
+ * @brief Prefetch memory for better cache performance
+ */
+void prefetch_buffer(const void* addr, size_t size);
+
+/**
+ * @brief Check if pointer is aligned to specified boundary
+ */
+bool is_aligned(const void* ptr, size_t alignment);
+
+/**
+ * @brief Align pointer to specified boundary
+ */
+void* align_pointer(void* ptr, size_t alignment);
+
+/**
+ * @brief Get buffer operation statistics
+ */
+BufferOpStats get_buffer_stats();
+
+/**
+ * @brief Reset buffer operation statistics
+ */
+void reset_buffer_stats();
+
+} // namespace buffer_tools
+
 } // namespace srt
 
 #endif

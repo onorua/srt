@@ -68,6 +68,8 @@ modified by
 #include "core.h"
 #include "logging.h"
 #include "crypto.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 #include "logging_api.h" // Required due to containing extern srt_logger_config
 #include "logger_defs.h"
 
@@ -387,10 +389,22 @@ srt::CUDT::~CUDT()
     destroySynch();
 
     // destroy the data structures
-    delete m_pSndBuffer;
-    delete m_pRcvBuffer;
-    delete m_pSndLossList;
-    delete m_pRcvLossList;
+    if (m_pSndBuffer) {
+        SRT_TRACK_DEALLOC_CAT(sizeof(CSndBuffer), srt::memory_monitor::categories::BUFFERS);
+        delete m_pSndBuffer;
+    }
+    if (m_pRcvBuffer) {
+        SRT_TRACK_DEALLOC_CAT(sizeof(CRcvBuffer), srt::memory_monitor::categories::BUFFERS);
+        delete m_pRcvBuffer;
+    }
+    if (m_pSndLossList) {
+        SRT_TRACK_DEALLOC_CAT(sizeof(CSndLossList), srt::memory_monitor::categories::LOSS_LISTS);
+        delete m_pSndLossList;
+    }
+    if (m_pRcvLossList) {
+        SRT_TRACK_DEALLOC_CAT(sizeof(CRcvLossList), srt::memory_monitor::categories::LOSS_LISTS);
+        delete m_pRcvLossList;
+    }
     delete m_pSNode;
     delete m_pRNode;
 }
@@ -5757,11 +5771,15 @@ bool srt::CUDT::prepareBuffers(CUDTException* eout)
                 << " authtag=" << authtag);
 
         m_pSndBuffer = new CSndBuffer(AF_INET, 32, m_iMaxSRTPayloadSize, authtag);
+        SRT_TRACK_ALLOC_CAT(sizeof(CSndBuffer), srt::memory_monitor::categories::BUFFERS);
         SRT_ASSERT(m_iPeerISN != -1);
         m_pRcvBuffer = new srt::CRcvBuffer(m_iPeerISN, m_config.iRcvBufSize, m_pRcvQueue->m_pUnitQueue, m_config.bMessageAPI);
+        SRT_TRACK_ALLOC_CAT(sizeof(CRcvBuffer), srt::memory_monitor::categories::BUFFERS);
         // After introducing lite ACK, the sndlosslist may not be cleared in time, so it requires twice a space.
         m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
+        SRT_TRACK_ALLOC_CAT(sizeof(CSndLossList), srt::memory_monitor::categories::LOSS_LISTS);
         m_pRcvLossList = new CRcvLossList(m_config.iFlightFlagSize);
+        SRT_TRACK_ALLOC_CAT(sizeof(CRcvLossList), srt::memory_monitor::categories::LOSS_LISTS);
     }
     catch (...)
     {
@@ -6260,6 +6278,7 @@ void srt::CUDT::addressAndSend(CPacket& w_pkt)
 // [[using maybe_locked(m_parent->m_ControlLock, if called from srt_close())]]
 bool srt::CUDT::closeInternal() ATR_NOEXCEPT
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::SOCKET_DESTRUCTION);
     // NOTE: this function is called from within the garbage collector thread.
 
     if (!m_bOpened)
