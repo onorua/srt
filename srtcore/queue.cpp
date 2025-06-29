@@ -60,6 +60,8 @@ modified by
 #include "threadname.h"
 #include "logging.h"
 #include "queue.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 using namespace std;
 using namespace srt::sync;
@@ -86,10 +88,13 @@ srt::CUnitQueue::CUnitQueue(int initNumUnits, int mss)
 srt::CUnitQueue::~CUnitQueue()
 {
     CQEntry* p = m_pQEntry;
+    int entries_deleted = 0;
 
     while (p != NULL)
     {
+        SRT_TRACK_DEALLOC_CAT(sizeof(CUnit) * m_iBlockSize, srt::memory_monitor::categories::QUEUES);
         delete[] p->m_pUnit;
+        SRT_TRACK_DEALLOC_CAT(m_iBlockSize * m_iMSS, srt::memory_monitor::categories::QUEUES);
         delete[] p->m_pBuffer;
 
         CQEntry* q = p;
@@ -97,8 +102,12 @@ srt::CUnitQueue::~CUnitQueue()
             p = NULL;
         else
             p = p->m_pNext;
+        SRT_TRACK_DEALLOC_CAT(sizeof(CQEntry), srt::memory_monitor::categories::QUEUES);
         delete q;
+        entries_deleted++;
     }
+
+    HLOGC(rslog.Debug, log << "CUnitQueue destroyed: " << entries_deleted << " entries");
 }
 
 srt::CUnitQueue::CQEntry* srt::CUnitQueue::allocateEntry(const int iNumUnits, const int mss)
@@ -110,11 +119,17 @@ srt::CUnitQueue::CQEntry* srt::CUnitQueue::allocateEntry(const int iNumUnits, co
     try
     {
         tempq = new CQEntry;
+        SRT_TRACK_ALLOC_CAT(sizeof(CQEntry), srt::memory_monitor::categories::QUEUES);
         tempu = new CUnit[iNumUnits];
+        SRT_TRACK_ALLOC_CAT(sizeof(CUnit) * iNumUnits, srt::memory_monitor::categories::QUEUES);
         tempb = new char[iNumUnits * mss];
+        SRT_TRACK_ALLOC_CAT(iNumUnits * mss, srt::memory_monitor::categories::QUEUES);
     }
     catch (...)
     {
+        if (tempq) SRT_TRACK_DEALLOC_CAT(sizeof(CQEntry), srt::memory_monitor::categories::QUEUES);
+        if (tempu) SRT_TRACK_DEALLOC_CAT(sizeof(CUnit) * iNumUnits, srt::memory_monitor::categories::QUEUES);
+        if (tempb) SRT_TRACK_DEALLOC_CAT(iNumUnits * mss, srt::memory_monitor::categories::QUEUES);
         delete tempq;
         delete[] tempu;
         delete[] tempb;
@@ -1205,8 +1220,10 @@ void srt::CRcvQueue::init(int qsize, size_t payload, int version, int hsize, CCh
 
     SRT_ASSERT(m_pUnitQueue == NULL);
     m_pUnitQueue = new CUnitQueue(qsize, (int)payload);
+    SRT_TRACK_ALLOC_CAT(sizeof(CUnitQueue), srt::memory_monitor::categories::QUEUES);
 
     m_pHash = new CHash;
+    SRT_TRACK_ALLOC_CAT(sizeof(CHash), srt::memory_monitor::categories::QUEUES);
     m_pHash->init(hsize);
 
     m_pChannel = cc;

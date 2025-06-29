@@ -55,6 +55,8 @@ modified by
 #include "list.h"
 #include "packet.h"
 #include "logging.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 // Use "inline namespace" in C++11
 namespace srt_logging
@@ -79,6 +81,7 @@ srt::CSndLossList::CSndLossList(int size)
     , m_ListLock()
 {
     m_caSeq = new Seq[size];
+    SRT_TRACK_ALLOC_CAT(sizeof(Seq) * size, srt::memory_monitor::categories::LOSS_LISTS);
 
     // -1 means there is no data in the node
     for (int i = 0; i < size; ++i)
@@ -93,6 +96,7 @@ srt::CSndLossList::CSndLossList(int size)
 
 srt::CSndLossList::~CSndLossList()
 {
+    SRT_TRACK_DEALLOC_CAT(sizeof(Seq) * m_iSize, srt::memory_monitor::categories::LOSS_LISTS);
     delete[] m_caSeq;
     releaseMutex(m_ListLock);
 }
@@ -104,6 +108,7 @@ void srt::CSndLossList::traceState() const
 
 int srt::CSndLossList::insert(int32_t seqno1, int32_t seqno2)
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::LOSS_LIST_INSERT);
     if (seqno1 < 0 || seqno2 < 0 ) {
         LOGC(qslog.Error, log << "IPE: Tried to insert negative seqno " << seqno1 << ":" << seqno2
             << " into sender's loss list. Ignoring.");
@@ -483,6 +488,7 @@ srt::CRcvLossList::CRcvLossList(int size)
     , m_iLargestSeq(SRT_SEQNO_NONE)
 {
     m_caSeq = new Seq[m_iSize];
+    SRT_TRACK_ALLOC_CAT(sizeof(Seq) * m_iSize, srt::memory_monitor::categories::LOSS_LISTS);
 
     // -1 means there is no data in the node
     for (int i = 0; i < size; ++i)
@@ -494,11 +500,13 @@ srt::CRcvLossList::CRcvLossList(int size)
 
 srt::CRcvLossList::~CRcvLossList()
 {
+    SRT_TRACK_DEALLOC_CAT(sizeof(Seq) * m_iSize, srt::memory_monitor::categories::LOSS_LISTS);
     delete[] m_caSeq;
 }
 
 int srt::CRcvLossList::insert(int32_t seqno1, int32_t seqno2)
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::LOSS_LIST_INSERT);
     SRT_ASSERT(seqno1 != SRT_SEQNO_NONE && seqno2 != SRT_SEQNO_NONE);
     // Make sure that seqno2 isn't earlier than seqno1.
     SRT_ASSERT(CSeqNo::seqcmp(seqno1, seqno2) <= 0);

@@ -48,3 +48,40 @@ compile_commands.json
 .idea/
 cmake-build-debug/
 tags
+
+# SRT specific build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+cmake_object_lib_support.c
+Makefile
+install_manifest.txt
+config-status.sh
+version.h
+*.pc
+haisrt.pc
+srt.pc
+
+# SRT executables
+srt-file-transmit
+srt-live-transmit
+srt-tunnel
+srt-ffplay
+
+# Test executables (but keep source files)
+test_*
+!test_*.cpp
+!test_*.c
+!test_*.h
+
+# Development artifacts
+*.patch
+*_fixes.*
+*_test.*
+debug_*
+example_*
+
+# Build directories
+build/
+Build/
+BUILD/

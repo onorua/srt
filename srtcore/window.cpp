@@ -57,6 +57,7 @@ modified by
 #include "common.h"
 #include "window.h"
 #include <algorithm>
+#include "performance_profiler.h"
 
 using namespace std;
 using namespace srt::sync;
@@ -81,6 +82,7 @@ void store(Seq* r_aSeq, const size_t size, int& r_iHead, int& r_iTail, int32_t s
 
 int acknowledge(Seq* r_aSeq, const size_t size, int& r_iHead, int& r_iTail, int32_t seq, int32_t& r_ack, const steady_clock::time_point& currtime)
 {
+   SRT_PERF_TIMER(srt::performance_profiler::operations::ACK_PROCESSING);
    // Head has not exceeded the physical boundary of the window
    if (r_iHead >= r_iTail)
    {

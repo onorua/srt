@@ -68,6 +68,8 @@ modified by
 #include "threadname.h"
 #include "srt.h"
 #include "udt.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 #ifdef _WIN32
 #include <win/wintime.h>
@@ -2867,6 +2869,7 @@ void srt::CUDTUnited::checkBrokenSockets()
 // [[using locked(m_GlobControlLock)]]
 void srt::CUDTUnited::removeSocket(const SRTSOCKET u)
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::SOCKET_DESTRUCTION);
     sockets_t::iterator i = m_ClosedSockets.find(u);
 
     // invalid socket ID
@@ -2890,6 +2893,8 @@ void srt::CUDTUnited::removeSocket(const SRTSOCKET u)
     if (s->isStillBusy())
     {
         HLOGC(smlog.Debug, log << "@" << s->m_SocketID << " is still busy, NOT deleting");
+        // Track that we're deferring deletion due to busy socket
+        SRT_TRACK_LOCK_CONTENTION("SocketDeletion");
         return;
     }
 
@@ -2966,6 +2971,7 @@ void srt::CUDTUnited::removeSocket(const SRTSOCKET u)
     s->core().closeInternal();
     enterCS(m_GlobControlLock);
     HLOGC(smlog.Debug, log << "GC/removeSocket: DELETING SOCKET @" << u);
+    SRT_TRACK_DEALLOC_CAT(sizeof(CUDTSocket), srt::memory_monitor::categories::SOCKETS);
     delete s;
     HLOGC(smlog.Debug, log << "GC/removeSocket: socket @" << u << " DELETED. Checking muxer.");
 

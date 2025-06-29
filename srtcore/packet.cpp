@@ -165,6 +165,8 @@ modified by
 #include "handshake.h"
 #include "logging.h"
 #include "handshake.h"
+#include "memory_monitor.h"
+#include "performance_profiler.h"
 
 namespace srt_logging
 {
@@ -200,22 +202,28 @@ char* CPacket::getData()
 
 void CPacket::allocate(size_t alloc_buffer_size)
 {
+    SRT_PERF_TIMER(srt::performance_profiler::operations::PACKET_SEND);
     if (m_data_owned)
     {
         if (getLength() == alloc_buffer_size)
             return; // already allocated
 
         // Would be nice to reallocate; for now just allocate again.
+        SRT_TRACK_DEALLOC_CAT(getLength(), srt::memory_monitor::categories::PACKETS);
         delete[] m_pcData;
     }
     m_PacketVector[PV_DATA].set(new char[alloc_buffer_size], alloc_buffer_size);
+    SRT_TRACK_ALLOC_CAT(alloc_buffer_size, srt::memory_monitor::categories::PACKETS);
     m_data_owned = true;
 }
 
 void CPacket::deallocate()
 {
     if (m_data_owned)
+    {
+        SRT_TRACK_DEALLOC_CAT(getLength(), srt::memory_monitor::categories::PACKETS);
         delete[](char*) m_PacketVector[PV_DATA].data();
+    }
     m_PacketVector[PV_DATA].set(NULL, 0);
     m_data_owned = false;
 }
