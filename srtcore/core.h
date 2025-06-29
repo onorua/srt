@@ -765,8 +765,9 @@ private:
 
     enum DropReason
     {
-        DROP_TOO_LATE, //< Drop to keep up to the live pace (TLPKTDROP).
-        DROP_DISCARD   //< Drop because another group member already provided these packets.
+        DROP_TOO_LATE,       //< Drop to keep up to the live pace (TLPKTDROP).
+        DROP_DISCARD,        //< Drop because another group member already provided these packets.
+        DROP_BUFFER_OVERFLOW //< Drop due to buffer overflow (server restart scenario).
     };
 
     /// Drop too late packets (receiver side). Update loss lists and ACK positions.

@@ -10208,15 +10208,57 @@ int srt::CUDT::handleSocketPacketReception(const vector<CUnit*>& incoming, bool&
             }
             else
             {
+                // Enhanced buffer overflow handling
+                const int32_t seq_gap = CSeqNo::seqoff(m_iRcvCurrSeqNo, rpkt.seqno());
+                const bool large_gap = seq_gap > 1000; // Configurable threshold
+
                 LOGC(qrlog.Warn, log << CONID() << "No room to store incoming packet seqno " << rpkt.seqno()
-                        << ", insert offset " << bufidx << ". "
+                        << ", insert offset " << bufidx << ", sequence gap " << seq_gap << ". "
                         << m_pRcvBuffer->strFullnessState(m_iRcvLastAck, steady_clock::now())
                     );
+
+                // If this is a large sequence gap (potential server restart scenario)
+                if (large_gap && m_bTsbPd && m_bTLPktDrop)
+                {
+                    LOGC(qrlog.Warn, log << CONID() << "Large sequence gap detected (" << seq_gap
+                         << " packets). Attempting buffer recovery.");
+
+                    // Try aggressive buffer cleanup
+                    const int initial_size = m_pRcvBuffer->getRcvDataSize();
+                    const int target_size = m_pRcvBuffer->capacity() / 4; // Keep only 25%
+
+                    if (initial_size > target_size)
+                    {
+                        // Drop old packets to make room
+                        const int packets_to_drop = initial_size - target_size;
+                        const int dropped = rcvDropTooLateUpTo(
+                            CSeqNo::incseq(m_pRcvBuffer->getStartSeqNo(), packets_to_drop),
+                            DROP_BUFFER_OVERFLOW
+                        );
+
+                        LOGC(qrlog.Warn, log << CONID() << "Dropped " << dropped
+                             << " old packets to make room for new data");
+
+                        // Retry insertion after cleanup
+                        const int new_bufidx = CSeqNo::seqoff(m_pRcvBuffer->getStartSeqNo(), rpkt.seqno());
+                        if (new_bufidx < int(m_pRcvBuffer->capacity()))
+                        {
+                            // Buffer cleanup successful, continue with packet insertion
+                            goto retry_insertion;
+                        }
+                    }
+                }
+
+                // If cleanup didn't help or wasn't attempted, drop the packet
+                enterCS(m_StatsLock);
+                m_stats.rcvr.recvdBelated.count(rpkt.getLength());
+                leaveCS(m_StatsLock);
 
                 return -1;
             }
         }
 
+        retry_insertion:
         const int buffer_add_result = m_pRcvBuffer->insert(u);
         if (buffer_add_result < 0)
         {

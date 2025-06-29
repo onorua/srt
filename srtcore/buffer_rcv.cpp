@@ -45,6 +45,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cmath>
 #include <limits>
+#include <iomanip>
 #include "buffer_rcv.h"
 #include "logging.h"
 
@@ -1112,6 +1113,12 @@ string CRcvBuffer::strFullnessState(int iFirstUnackSeqNo, const time_point& tsNo
        << " m_iStartPos=" << m_iStartPos << " m_iMaxPosOff=" << m_iMaxPosOff << ". ";
 
     ss << "Space avail " << getAvailSize(iFirstUnackSeqNo) << "/" << m_szSize << " pkts. ";
+
+    // Add buffer utilization percentage
+    const double utilization = m_iMaxPosOff > 0 ? double(m_iMaxPosOff) / m_szSize : 0.0;
+    ss << "Utilization " << std::fixed << std::setprecision(1) << (utilization * 100) << "%. ";
+
+    ss << "Data size " << getRcvDataSize() << " pkts. ";
 
     if (m_tsbpd.isEnabled() && m_iMaxPosOff > 0)
     {
